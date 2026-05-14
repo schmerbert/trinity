@@ -8,3 +8,5 @@ requests
 praw
 feedparser
 pycoingecko
+rich
+pyttsx3

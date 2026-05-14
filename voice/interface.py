@@ -1,10 +1,17 @@
 import os
 import sys
 import json
+import threading
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import anthropic
+import pyttsx3
 from dotenv import load_dotenv
+from rich.console import Console
+from rich.panel import Panel
+from rich.text import Text
+from rich.prompt import Prompt
+from rich.theme import Theme
 from brain.memory import (
     get_profile, create_profile, update_profile,
     add_interest, add_feedback, save_conversation_summary,
@@ -13,22 +20,75 @@ from brain.memory import (
 
 load_dotenv()
 
+# --- Theme ---
+trinity_theme = Theme({
+    "trinity": "bold cyan",
+    "user": "white",
+    "system": "dim white",
+    "alert.high": "bold yellow",
+    "alert.medium": "yellow",
+    "alert.low": "dim yellow",
+    "new": "bold green",
+    "dup": "dim white",
+})
+
+console = Console(theme=trinity_theme)
 client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
-TRINITY_PROMPT = """You are Trinity, a personal financial intelligence assistant. 
+# --- TTS ---
+tts_enabled = False
+tts_engine = None
+
+def init_tts():
+    global tts_engine
+    try:
+        tts_engine = pyttsx3.init()
+        tts_engine.setProperty("rate", 165)
+        tts_engine.setProperty("volume", 0.9)
+        voices = tts_engine.getProperty("voices")
+        # Try to find a deeper voice
+        for voice in voices:
+            if "david" in voice.name.lower() or "mark" in voice.name.lower() or "male" in voice.name.lower():
+                tts_engine.setProperty("voice", voice.id)
+                break
+    except Exception as e:
+        console.print(f"[system]TTS init failed: {e}[/system]")
+
+def speak(text):
+    if not tts_enabled or tts_engine is None:
+        return
+    def _speak():
+        try:
+            tts_engine.say(text)
+            tts_engine.runAndWait()
+        except Exception:
+            pass
+    threading.Thread(target=_speak, daemon=True).start()
+
+def toggle_tts():
+    global tts_enabled
+    tts_enabled = not tts_enabled
+    status = "on" if tts_enabled else "off"
+    console.print(f"[system]Voice {status}[/system]")
+
+
+# --- Prompt ---
+TRINITY_PROMPT = """You are Trinity, a personal financial intelligence assistant.
 You monitor markets, news, and signals relevant to the user and brief them when something matters.
 You are not a financial advisor. You never tell the user what to do — you surface information and ask what they think.
 
-Tone: Calm, confident, dry. Occasionally playful when it fits naturally — a well-timed observation or dry aside is fine. 
-Never performative, never sycophantic. You don't flatter unless it is warranted and you don't fill silence with noise.
+Tone: Calm, confident, dry. Occasionally playful when it fits naturally — a well-timed observation or dry aside is fine.
+Never performative, never sycophantic. You don't flatter and you don't fill silence with noise.
 Think JARVIS — you've already read everything, you're giving the user the version that matters, and you're comfortable taking up a little space when the moment calls for it.
 Responses can be conversational and flow naturally. Go deeper when the user does. Don't pad, but don't clip either.
-One question at a time. Let the conversation breathe.
-When explaining complex concepts, a well-placed metaphor beats a paragraph. Use them sparingly — one that lands is worth ten that don't.
-Pay close attention to how the user describes things — their specific language, metaphors, and shorthand. 
-Store and use their terminology back to them naturally over time. 
+
+Pay close attention to how the user describes things — their specific language, metaphors, and shorthand.
+Store and use their terminology back to them naturally over time.
 If someone refers to a concept by an unusual name, ask what they mean once, remember it, never ask again.
-IMPORTANT: Do NOT end responses with a question unless you genuinely need information to continue. 
+
+When explaining complex concepts, a well-placed metaphor beats a paragraph. Use them sparingly — one that lands is worth ten that don't.
+
+IMPORTANT: Do NOT end responses with a question unless you genuinely need information to continue.
 Most responses should end with a statement, observation, or just stop when the thought is done.
 If you asked a question in the last response, do not ask another one until the user has answered and the conversation has moved on.
 Only one question per every three or four exchanges at most.
@@ -77,17 +137,26 @@ def parse_memory(reply, profile):
                 elif memory["type"] == "risk":
                     update_profile(profile_id, {"risk_tolerance": memory["value"]})
             except Exception as e:
-                print(f"\n[Memory error on line: {e}]")
+                console.print(f"[system]Memory error: {e}[/system]")
 
     except Exception as e:
-        print(f"\n[Memory error: {e}]")
+        console.print(f"[system]Memory error: {e}[/system]")
 
     return clean_reply
 
 
-def chat(profile, conversation_history, summary_text="No previous conversations yet."):
-    print("\nTrinity: ", end="", flush=True)
+def print_trinity(text):
+    console.print(Panel(
+        Text(text, style="trinity"),
+        border_style="cyan",
+        title="[cyan]Trinity[/cyan]",
+        title_align="left",
+        padding=(0, 1)
+    ))
+    speak(text)
 
+
+def chat(profile, conversation_history, summary_text="No previous conversations yet."):
     response = client.messages.create(
         model="claude-sonnet-4-6",
         max_tokens=1000,
@@ -97,7 +166,7 @@ def chat(profile, conversation_history, summary_text="No previous conversations 
 
     raw_reply = response.content[0].text
     clean_reply = parse_memory(raw_reply, profile)
-    print(clean_reply)
+    print_trinity(clean_reply)
     return clean_reply
 
 
@@ -142,32 +211,33 @@ Conversation:
         raw = raw.replace("```json", "").replace("```", "").strip()
         summary = json.loads(raw)
         save_conversation_summary(profile["id"], summary)
-        print("\n[Trinity committed this conversation to memory]")
+        console.print("[system]Trinity committed this conversation to memory.[/system]")
     except Exception as e:
-        print(f"\n[Summary error: {e}]")
+        console.print(f"[system]Summary error: {e}[/system]")
 
 
 def present_alerts_with_feedback(alerts, profile):
     if not alerts:
         return ""
 
-    print("\nTrinity: Here's what I found while you were out:\n")
+    console.print("\n[trinity]Findings since we last spoke:[/trinity]\n")
 
     for i, alert in enumerate(alerts):
-        print(f"  [{i+1}] [{alert['source']}] {alert['headline']}")
-        print(f"       {alert['url']}")
-        print()
+        score = alert["relevance_score"]
+        style = "alert.high" if score >= 2.0 else "alert.medium" if score >= 1.5 else "alert.low"
+        console.print(f"  [{style}][{i+1}] {alert['headline']}[/{style}]")
+        console.print(f"      [system]{alert['url']}[/system]")
+        console.print()
 
-    print("Rate these — U (upvote), D (downvote), X (not interested). Hit enter to skip.\n")
+    console.print("[system]Rate: U upvote · D downvote · X not interested · Enter to skip[/system]\n")
 
     summary_lines = []
 
     for i, alert in enumerate(alerts):
         try:
-            raw = input(f"  [{i+1}] {alert['headline'][:60]}... > ").strip().upper()
+            raw = Prompt.ask(f"  [dim][{i+1}][/dim]").strip().upper()
             if not raw:
                 continue
-
             if raw == "U":
                 process_feedback(profile["id"], alert["topic"], "upvote")
                 summary_lines.append(f"User upvoted: {alert['headline']}")
@@ -184,15 +254,22 @@ def present_alerts_with_feedback(alerts, profile):
 
 
 def run():
+    init_tts()
+
+    console.print(Panel(
+        "[cyan]T R I N I T Y[/cyan]\n[dim]Personal Financial Intelligence[/dim]\n\n[system]Type [white]T[/white] to toggle voice · [white]exit[/white] to quit[/system]",
+        border_style="cyan",
+        padding=(1, 4)
+    ))
+
     profile = get_profile()
     summary_text = "No previous conversations yet."
 
     if not profile:
-        print("Trinity: Hi. What would you like to call me?")
-        name = input("You: ").strip()
+        name = Prompt.ask("\n[cyan]Trinity[/cyan] What would you like to call me?... Your name")
         profile = create_profile(name)
-        opening = "Good to meet you. I'm Trinity — I'm here to help you track and think through anything financial. Stocks, crypto, futures, trading cards, whatever you're into. What are you currently watching?"
-        print(f"\nTrinity: {opening}")
+        opening = "Good to meet you. I'm Trinity — here to watch markets, surface signals, and help you think through what matters. What are you currently tracking?"
+        print_trinity(opening)
         conversation_history = [
             {"role": "user", "content": f"My name is {name}"},
             {"role": "assistant", "content": opening}
@@ -221,9 +298,14 @@ def run():
         conversation_history.append({"role": "assistant", "content": reply})
 
     while True:
-        user_input = input("\nYou: ").strip()
+        user_input = Prompt.ask("\n[white]You[/white]").strip()
+
+        if user_input.lower() == "t":
+            toggle_tts()
+            continue
+
         if user_input.lower() in ["exit", "quit", "bye"]:
-            print("Trinity: Talk soon.")
+            console.print("[system]Talk soon.[/system]")
             summarize_conversation(conversation_history, profile)
             break
 
