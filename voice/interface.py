@@ -5,7 +5,11 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import anthropic
 from dotenv import load_dotenv
-from brain.memory import get_profile, create_profile, update_profile, add_interest, add_feedback, save_conversation_summary, get_recent_summaries, get_unseen_alerts, mark_alerts_seen
+from brain.memory import (
+    get_profile, create_profile, update_profile,
+    add_interest, add_feedback, save_conversation_summary,
+    get_recent_summaries, get_unseen_alerts, mark_alerts_seen, process_feedback
+)
 
 load_dotenv()
 
@@ -30,13 +34,20 @@ Current user profile:
 Recent conversation summaries:
 {summaries}
 
-After each user message, if they mention any of the following extract them and return a JSON block at the very end of your response wrapped in <memory> tags:
-- Any new interest or topic they mention: {{"type": "interest", "topic": "...", "weight": 1.0}}
-- Any feedback sentiment (positive/negative/neutral) about a topic: {{"type": "feedback", "topic": "...", "sentiment": "positive/negative/neutral"}}
-- Risk tolerance if mentioned: {{"type": "risk", "value": "low/medium/high"}}
+After each user message, analyze what the user said and extract memory signals. Return a JSON block at the very end of your response wrapped in <memory> tags.
 
-Only include the <memory> tag if there is something genuinely new to store. Do not include it in every response.
+Extract these signal types:
+- Explicit interest: {{"type": "interest", "topic": "...", "weight": 1.0}}
+- Explicit feedback: {{"type": "feedback", "topic": "...", "sentiment": "positive/negative/neutral"}}
+- Risk tolerance: {{"type": "risk", "value": "low/medium/high"}}
+- Inferred high engagement (user asked follow up, showed excitement, went deep on a topic): {{"type": "interest", "topic": "...", "weight": 1.5}}
+- Inferred low engagement (user changed subject, gave one word answer, dismissed a topic): {{"type": "feedback", "topic": "...", "sentiment": "negative"}}
+- Inferred not interested (user explicitly said not interested, irrelevant, or ignored repeatedly): {{"type": "feedback", "topic": "...", "sentiment": "negative"}}
+
+Only include the <memory> tag when there is a genuine signal to store. Do not force it on every response.
+Each signal on its own line inside the tags. Raw JSON only, no formatting.
 """
+
 
 def parse_memory(reply, profile):
     if "<memory>" not in reply:
@@ -87,7 +98,7 @@ def chat(profile, conversation_history, summary_text="No previous conversations 
 def summarize_conversation(conversation_history, profile):
     if len(conversation_history) < 2:
         return
-    
+
     clean_history = []
     for msg in conversation_history:
         clean_history.append({
@@ -130,6 +141,42 @@ Conversation:
         print(f"\n[Summary error: {e}]")
 
 
+def present_alerts_with_feedback(alerts, profile):
+    if not alerts:
+        return ""
+
+    print("\nTrinity: Here's what I found while you were out:\n")
+
+    for i, alert in enumerate(alerts):
+        print(f"  [{i+1}] [{alert['source']}] {alert['headline']}")
+        print(f"       {alert['url']}")
+        print()
+
+    print("Rate these — U (upvote), D (downvote), X (not interested). Hit enter to skip.\n")
+
+    summary_lines = []
+
+    for i, alert in enumerate(alerts):
+        try:
+            raw = input(f"  [{i+1}] {alert['headline'][:60]}... > ").strip().upper()
+            if not raw:
+                continue
+
+            if raw == "U":
+                process_feedback(profile["id"], alert["topic"], "upvote")
+                summary_lines.append(f"User upvoted: {alert['headline']}")
+            elif raw == "D":
+                process_feedback(profile["id"], alert["topic"], "downvote")
+                summary_lines.append(f"User downvoted: {alert['headline']}")
+            elif raw == "X":
+                process_feedback(profile["id"], alert["topic"], "not_interested")
+                summary_lines.append(f"User marked not interested: {alert['headline']}")
+        except Exception:
+            continue
+
+    return "\n".join(summary_lines)
+
+
 def run():
     profile = get_profile()
     summary_text = "No previous conversations yet."
@@ -144,24 +191,28 @@ def run():
             {"role": "user", "content": f"My name is {name}"},
             {"role": "assistant", "content": opening}
         ]
-
     else:
         summaries = get_recent_summaries(profile["id"])
         summary_text = json.dumps(summaries, indent=2) if summaries else "No previous conversations yet."
-    
+
         unseen_alerts = get_unseen_alerts(profile["id"])
-        alert_text = ""
-    if unseen_alerts:
-        alert_text = "\n\nYou have new alerts since we last spoke:\n"
-        for alert in unseen_alerts:
-            alert_text += f"- [{alert['source']}] {alert['headline']}\n  {alert['url']}\n"
+        feedback_summary = ""
+
+        if unseen_alerts:
+            feedback_summary = present_alerts_with_feedback(unseen_alerts, profile)
             mark_alerts_seen(profile["id"])
 
-    conversation_history = []
-    opening_message = "Hey Trinity" if not unseen_alerts else f"Hey Trinity, what did you find?"
-    reply = chat(profile, conversation_history + [{"role": "user", "content": opening_message + alert_text}], summary_text)
-    conversation_history.append({"role": "user", "content": opening_message})
-    conversation_history.append({"role": "assistant", "content": reply})
+        conversation_history = []
+        opening_message = "Hey Trinity"
+
+        if feedback_summary:
+            opening_message += f"\n\nUser just rated these alerts:\n{feedback_summary}\nBriefly acknowledge and ask what they want to dig into."
+        elif unseen_alerts:
+            opening_message += "\n\nYou have new alerts since we last spoke — check them above."
+
+        reply = chat(profile, conversation_history + [{"role": "user", "content": opening_message}], summary_text)
+        conversation_history.append({"role": "user", "content": "Hey Trinity"})
+        conversation_history.append({"role": "assistant", "content": reply})
 
     while True:
         user_input = input("\nYou: ").strip()

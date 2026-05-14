@@ -83,6 +83,7 @@ def get_unseen_alerts(profile_id, limit=10):
         .select("*")\
         .eq("profile_id", profile_id)\
         .eq("seen", False)\
+        .gte("relevance_score", 1.5)\
         .order("relevance_score", desc=True)\
         .limit(limit)\
         .execute()
@@ -93,3 +94,24 @@ def mark_alerts_seen(profile_id):
         .update({"seen": True})\
         .eq("profile_id", profile_id)\
         .execute()
+
+def process_feedback(profile_id, topic, feedback):
+    profile = get_profile()
+    interests = profile.get("interests", [])
+    
+    updated = False
+    for interest in interests:
+        if interest.get("topic", "").lower() == topic.lower():
+            if feedback == "upvote":
+                interest["weight"] = round(interest.get("weight", 1.0) + 0.5, 2)
+            elif feedback == "downvote":
+                interest["weight"] = round(max(0.1, interest.get("weight", 1.0) - 0.3), 2)
+            elif feedback == "not_interested":
+                interest["weight"] = 0.0
+            updated = True
+            break
+    
+    if not updated and feedback == "upvote":
+        interests.append({"topic": topic, "weight": 1.5})
+    
+    return update_profile(profile_id, {"interests": interests})
