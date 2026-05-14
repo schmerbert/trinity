@@ -1,9 +1,10 @@
 import os
 import sys
 import json
+import hashlib
+import time
 import requests
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
 
 from dotenv import load_dotenv
 from brain.memory import get_profile, save_alert
@@ -16,11 +17,12 @@ KEYWORDS = [k.strip().lower() for k in os.getenv("KEYWORDS", "").split(",")]
 
 HEADERS = {"User-Agent": "Trinity/1.0 (personal research assistant)"}
 
+
 def score_relevance(text, profile):
     text_lower = text.lower()
     score = 0.0
     interests = profile.get("interests", [])
-    
+
     for interest in interests:
         topic = interest.get("topic", "").lower()
         weight = interest.get("weight", 1.0)
@@ -33,6 +35,15 @@ def score_relevance(text, profile):
 
     return round(score, 2)
 
+
+def generate_hash(alert):
+    if alert["source"] == "dexscreener":
+        unique_string = f"{alert['headline']}{alert['source']}{alert['topic']}{time.time()}"
+    else:
+        unique_string = f"{alert['headline']}{alert['source']}{alert['topic']}"
+    return hashlib.md5(unique_string.encode()).hexdigest()
+
+
 def scrape_reddit(profile):
     print("[Eyes] Scanning Reddit...")
     alerts = []
@@ -41,7 +52,7 @@ def scrape_reddit(profile):
         try:
             url = f"https://www.reddit.com/r/{subreddit}/new.json?limit=25"
             response = requests.get(url, headers=HEADERS, timeout=10)
-            
+
             if response.status_code != 200:
                 print(f"[Eyes] Skipping r/{subreddit} — status {response.status_code}")
                 continue
@@ -76,6 +87,7 @@ def scrape_reddit(profile):
             print(f"[Eyes] Reddit error on r/{subreddit}: {e}")
 
     return alerts
+
 
 def scrape_news(profile):
     print("[Eyes] Scanning news...")
@@ -115,17 +127,6 @@ def scrape_news(profile):
 
     return alerts
 
-def get_coingecko_id_by_ca(ca, platform="solana"):
-    cg = CoinGeckoAPI()
-    try:
-        result = cg.get_coin_info_from_contract_address_by_id(
-            id=platform,
-            contract_address=ca
-        )
-        return result.get("id"), result.get("name"), result.get("symbol")
-    except Exception as e:
-        print(f"[Eyes] CoinGecko lookup error: {e}")
-        return None, None, None
 
 def scrape_crypto_prices(profile):
     print("[Eyes] Checking crypto prices via DexScreener...")
@@ -154,7 +155,6 @@ def scrape_crypto_prices(profile):
                 print(f"[Eyes] No pairs found for {name}")
                 continue
 
-            # Take the highest liquidity pair
             pair = sorted(pairs, key=lambda x: float(x.get("liquidity", {}).get("usd", 0)), reverse=True)[0]
 
             token_name = pair.get("baseToken", {}).get("name", name)
@@ -190,6 +190,7 @@ def scrape_crypto_prices(profile):
 
     return alerts
 
+
 def run_eyes():
     profile = get_profile()
     if not profile:
@@ -204,7 +205,9 @@ def run_eyes():
     seen_urls = set()
     deduped_alerts = []
     for alert in all_alerts:
-        if alert["url"] not in seen_urls:
+        if alert["source"] == "dexscreener":
+            deduped_alerts.append(alert)
+        elif alert["url"] not in seen_urls:
             seen_urls.add(alert["url"])
             deduped_alerts.append(alert)
 
@@ -213,8 +216,13 @@ def run_eyes():
     print(f"\n[Eyes] Found {len(deduped_alerts)} unique relevant items.")
 
     for alert in deduped_alerts[:15]:
-        save_alert(alert)
-        print(f"  [{alert['relevance_score']}] {alert['headline'][:80]}")
+        alert["content_hash"] = generate_hash(alert)
+        saved = save_alert(alert)
+        if saved:
+            print(f"  [NEW] [{alert['relevance_score']}] {alert['headline'][:80]}")
+        else:
+            print(f"  [DUP] [{alert['relevance_score']}] {alert['headline'][:80]}")
+
 
 if __name__ == "__main__":
     run_eyes()

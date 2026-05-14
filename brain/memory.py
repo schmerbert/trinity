@@ -67,8 +67,16 @@ def get_recent_summaries(profile_id, limit=3):
     return result.data
 
 def save_alert(alert):
-    result = supabase.table("alerts").insert(alert).execute()
-    return result.data[0]
+    try:
+        result = supabase.table("alerts").insert(alert).execute()
+        if result.data:
+            return result.data[0]
+        return None
+    except Exception as e:
+        if "duplicate" in str(e).lower() or "unique" in str(e).lower():
+            return None
+        print(f"[Brain] Save alert error: {e}")
+        return None
 
 def get_unseen_alerts(profile_id, limit=10):
     result = supabase.table("alerts")\
