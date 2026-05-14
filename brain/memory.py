@@ -1,3 +1,7 @@
+# Trinity — Personal Financial Intelligence
+# Copyright (C) 2025 schmerbert
+# Licensed under GNU GPL v3 — see LICENSE file for details
+
 import os
 from supabase import create_client
 from dotenv import load_dotenv
