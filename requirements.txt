@@ -1,0 +1,13 @@
+anthropic
+supabase
+python-dotenv
+anthropic
+supabase
+python-dotenv
+requests
+praw
+feedparser
+pycoingecko
+rich
+pyttsx3
+edge-tts
