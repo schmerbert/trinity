@@ -31,17 +31,20 @@ def add_interest(profile_id, interest, weight=1.0, category=None, symbol=None):
     profile = get_profile()
     interests = profile.get("interests", [])
     
-    # Check if already exists
+    # Normalize for comparison
+    normalized = interest.lower().strip()
+    
     for existing in interests:
-        if existing.get("topic", "").lower() == interest.lower():
-            existing["weight"] = round(existing.get("weight", 1.0) + 0.1, 2)
+        existing_normalized = existing.get("topic", "").lower().strip()
+        if existing_normalized == normalized:
+            existing["weight"] = round(min(existing.get("weight", 1.0) + 0.1, 5.0), 2)
             if category:
                 existing["category"] = category
             if symbol:
                 existing["symbol"] = symbol
             return update_profile(profile_id, {"interests": interests})
     
-    new_interest = {"topic": interest, "weight": weight}
+    new_interest = {"topic": normalized, "weight": weight}
     if category:
         new_interest["category"] = category
     if symbol:
