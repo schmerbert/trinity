@@ -4,6 +4,7 @@ import json
 import asyncio
 import threading
 import tempfile
+import re
 import time
 import subprocess
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -184,11 +185,13 @@ def stream_chat(profile, conversation_history, summary_text="No previous convers
         for text in stream.text_stream:
             full_reply += text
 
-    clean_reply = parse_memory(full_reply, profile)
+    import re
+        clean_reply = parse_memory(full_reply, profile)
 
     if tts_enabled:
-        # Speak in background while typing out text
-        threading.Thread(target=_speak_sync, args=(clean_reply,), daemon=True).start()
+        spoken = re.sub(r'http\S+', '', clean_reply).strip()
+        spoken = re.sub(r'\s+', ' ', spoken)
+        threading.Thread(target=_speak_sync, args=(spoken,), daemon=True).start()
 
     # Typewriter effect
     words = clean_reply.split(" ")
