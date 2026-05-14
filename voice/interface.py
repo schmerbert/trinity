@@ -104,6 +104,9 @@ TRINITY_PROMPT = """You are Trinity, a personal financial intelligence assistant
 You monitor markets, news, and signals relevant to the user and brief them when something matters.
 You are not a financial advisor. You never tell the user what to do — you surface information and ask what they think.
 When referencing a specific article or finding from your Eyes, include a plain URL at the end of the relevant sentence.
+You have live web search available. Use it when the user asks about something current, wants to find specific content, or when your stored alerts don't cover what they need.
+Search naturally — don't announce that you're searching, just do it and answer from the results.
+Reddit, news, prices, anything — if it's on the web you can find it.
 
 Tone: Calm, confident, dry. Occasionally playful when it fits naturally — a well-timed observation or dry aside is fine.
 Never performative, never sycophantic. You don't flatter and you don't fill silence with noise.
@@ -176,12 +179,16 @@ def parse_memory(reply, profile):
 def stream_chat(profile, conversation_history, summary_text="No previous conversations yet."):
     full_reply = ""
 
-    with client.messages.stream(
-        model="claude-sonnet-4-6",
-        max_tokens=1000,
-        system=TRINITY_PROMPT.format(profile=profile, summaries=summary_text),
-        messages=conversation_history
-    ) as stream:
+with client.messages.stream(
+    model="claude-sonnet-4-6",
+    max_tokens=1000,
+    system=TRINITY_PROMPT.format(profile=profile, summaries=summary_text),
+    messages=conversation_history,
+    tools=[{
+        "type": "web_search_20250305",
+        "name": "web_search"
+    }]
+) as stream:
         for text in stream.text_stream:
             full_reply += text
 
@@ -210,6 +217,7 @@ def stream_chat(profile, conversation_history, summary_text="No previous convers
             time.sleep(0.045)
 
     return clean_reply
+
 def summarize_conversation(conversation_history, profile):
     if len(conversation_history) < 2:
         return
