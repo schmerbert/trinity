@@ -4,6 +4,7 @@ import json
 import asyncio
 import threading
 import tempfile
+import time
 import subprocess
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -35,10 +36,10 @@ trinity_theme = Theme({
 })
 
 console = Console(theme=trinity_theme)
-client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+client = anthropic.Anthropic(api_key="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")
 
 # --- TTS ---
-tts_enabled = False
+tts_enabled = True
 TTS_VOICE = "en-US-GuyNeural"
 tts_queue = []
 tts_lock = threading.Lock()
@@ -56,7 +57,7 @@ def _speak_sync(text):
             tmp_path = f.name
 
         async def _generate():
-            communicate = edge_tts.Communicate(text, TTS_VOICE)
+            communicate = edge_tts.Communicate(text, TTS_VOICE, rate="+30%")
             await communicate.save(tmp_path)
 
         asyncio.run(_generate())
@@ -99,6 +100,7 @@ def toggle_tts():
 TRINITY_PROMPT = """You are Trinity, a personal financial intelligence assistant.
 You monitor markets, news, and signals relevant to the user and brief them when something matters.
 You are not a financial advisor. You never tell the user what to do — you surface information and ask what they think.
+When referencing a specific article or finding from your Eyes, include a plain URL at the end of the relevant sentence.
 
 Tone: Calm, confident, dry. Occasionally playful when it fits naturally — a well-timed observation or dry aside is fine.
 Never performative, never sycophantic. You don't flatter and you don't fill silence with noise.
@@ -170,7 +172,6 @@ def parse_memory(reply, profile):
 
 def stream_chat(profile, conversation_history, summary_text="No previous conversations yet."):
     full_reply = ""
-    console.print()
 
     with client.messages.stream(
         model="claude-sonnet-4-6",
@@ -178,27 +179,32 @@ def stream_chat(profile, conversation_history, summary_text="No previous convers
         system=TRINITY_PROMPT.format(profile=profile, summaries=summary_text),
         messages=conversation_history
     ) as stream:
-        # Stream text to a live panel
-        displayed = ""
-        with Live(
-            Panel(Text("", style="trinity"), border_style="cyan", title="[cyan]Trinity[/cyan]", title_align="left", padding=(0, 1)),
-            console=console,
-            refresh_per_second=15
-        ) as live:
-            for text in stream.text_stream:
-                full_reply += text
-                displayed += text
-                # Strip memory tags from display
-                display_clean = displayed.split("<memory>")[0].strip()
-                live.update(
-                    Panel(Text(display_clean, style="trinity"), border_style="cyan", title="[cyan]Trinity[/cyan]", title_align="left", padding=(0, 1))
-                )
+        for text in stream.text_stream:
+            full_reply += text
 
     clean_reply = parse_memory(full_reply, profile)
-    speak(clean_reply)
+
+    if tts_enabled:
+        # Speak in background while typing out text
+        threading.Thread(target=_speak_sync, args=(clean_reply,), daemon=True).start()
+
+    # Typewriter effect
+    words = clean_reply.split(" ")
+    displayed = ""
+    console.print()
+    with Live(
+        Panel(Text("", style="trinity"), border_style="cyan", title="[cyan]Trinity[/cyan]", title_align="left", padding=(0, 1)),
+        console=console,
+        refresh_per_second=20
+    ) as live:
+        for word in words:
+            displayed += word + " "
+            live.update(
+                Panel(Text(displayed.strip(), style="trinity"), border_style="cyan", title="[cyan]Trinity[/cyan]", title_align="left", padding=(0, 1))
+            )
+            time.sleep(0.045)
+
     return clean_reply
-
-
 def summarize_conversation(conversation_history, profile):
     if len(conversation_history) < 2:
         return
@@ -255,7 +261,7 @@ def present_alerts_with_feedback(alerts, profile):
         score = alert["relevance_score"]
         style = "alert.high" if score >= 2.0 else "alert.medium" if score >= 1.5 else "alert.low"
         console.print(f"  [{style}][{i+1}] {alert['headline']}[/{style}]")
-        console.print(f"      [system]{alert['url']}[/system]")
+        console.print(f"      [system][link={alert['url']}]Open[/link][/system]")
         console.print()
 
     console.print("[system]Rate: U upvote · D downvote · X not interested · Enter to skip[/system]\n")

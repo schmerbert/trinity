@@ -71,18 +71,6 @@ $envLines = @(
 )
 $envLines | Out-File -FilePath "$INSTALL_DIR\.env" -Encoding UTF8
 
-# --- Create launch batch file ---
-Write-Host "Creating launcher..." -ForegroundColor DarkGray
-$launchLines = @(
-    "@echo off",
-    "cd /d $INSTALL_DIR",
-    "call venv\Scripts\activate.bat",
-    "python eyes\scraper.py",
-    "python voice\interface.py",
-    "pause"
-)
-$launchLines | Out-File -FilePath "$INSTALL_DIR\trinity.bat" -Encoding ASCII
-
 # --- Desktop Shortcut ---
 Write-Host "Creating desktop shortcut..." -ForegroundColor DarkGray
 $WshShell = New-Object -ComObject WScript.Shell
@@ -92,17 +80,14 @@ $Shortcut.WorkingDirectory = $INSTALL_DIR
 $Shortcut.Description = "Trinity Financial Intelligence"
 $Shortcut.Save()
 
-# --- Task Scheduler ---
-Write-Host "Scheduling background scans..." -ForegroundColor DarkGray
+# --- Task Scheduler (disabled by default) ---
+Write-Host "Registering startup task (disabled by default)..." -ForegroundColor DarkGray
 $action = New-ScheduledTaskAction `
-    -Execute "$INSTALL_DIR\venv\Scripts\python.exe" `
-    -Argument "$INSTALL_DIR\eyes\scraper.py" `
+    -Execute "$INSTALL_DIR\venv\Scripts\pythonw.exe" `
+    -Argument "$INSTALL_DIR\nervous_system\watcher.py" `
     -WorkingDirectory $INSTALL_DIR
-$trigger = New-ScheduledTaskTrigger -RepetitionInterval (New-TimeSpan -Hours 4) -Once -At (Get-Date)
-$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Minutes 5)
-Register-ScheduledTask -TaskName "Trinity Eyes" -Action $action -Trigger $trigger -Settings $settings -Force | Out-Null
-
-Write-Host ""
-Write-Host "  Trinity is ready." -ForegroundColor Cyan
-Write-Host "  Launch from your desktop or run trinity.bat" -ForegroundColor DarkGray
-Write-Host ""
+$trigger = New-ScheduledTaskTrigger -AtLogon
+$settings = New-ScheduledTaskSettingsSet -ExecutionTimeLimit (New-TimeSpan -Hours 0)
+$task = Register-ScheduledTask -TaskName "Trinity Eyes" -Action $action -Trigger $trigger -Settings $settings -Force
+$task | Disable-ScheduledTask | Out-Null
+Write-Host "  Startup task registered but disabled." -ForegroundColor DarkGray
