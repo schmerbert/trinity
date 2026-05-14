@@ -186,28 +186,26 @@ def parse_memory(reply, profile):
 def stream_chat(profile, conversation_history, summary_text="No previous conversations yet."):
     full_reply = ""
 
-with client.messages.stream(
-    model="claude-sonnet-4-6",
-    max_tokens=1000,
-    system=TRINITY_PROMPT.format(profile=profile, summaries=summary_text),
-    messages=conversation_history,
-    tools=[{
-        "type": "web_search_20250305",
-        "name": "web_search"
-    }]
-) as stream:
+    with client.messages.stream(
+        model="claude-sonnet-4-6",
+        max_tokens=1000,
+        system=TRINITY_PROMPT.format(profile=profile, summaries=summary_text),
+        messages=conversation_history,
+        tools=[{
+            "type": "web_search_20250305",
+            "name": "web_search"
+        }]
+    ) as stream:
         for text in stream.text_stream:
             full_reply += text
 
-    import re
-        clean_reply = parse_memory(full_reply, profile)
+    clean_reply = parse_memory(full_reply, profile)
 
     if tts_enabled:
         spoken = re.sub(r'http\S+', '', clean_reply).strip()
         spoken = re.sub(r'\s+', ' ', spoken)
         threading.Thread(target=_speak_sync, args=(spoken,), daemon=True).start()
 
-    # Typewriter effect
     words = clean_reply.split(" ")
     displayed = ""
     console.print()
