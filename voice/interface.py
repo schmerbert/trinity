@@ -1,17 +1,21 @@
 import os
 import sys
 import json
+import asyncio
 import threading
+import tempfile
+import subprocess
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import anthropic
-import pyttsx3
+import edge_tts
 from dotenv import load_dotenv
 from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 from rich.prompt import Prompt
 from rich.theme import Theme
+from rich.live import Live
 from brain.memory import (
     get_profile, create_profile, update_profile,
     add_interest, add_feedback, save_conversation_summary,
@@ -28,8 +32,6 @@ trinity_theme = Theme({
     "alert.high": "bold yellow",
     "alert.medium": "yellow",
     "alert.low": "dim yellow",
-    "new": "bold green",
-    "dup": "dim white",
 })
 
 console = Console(theme=trinity_theme)
@@ -37,33 +39,54 @@ client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 # --- TTS ---
 tts_enabled = False
-tts_engine = None
+TTS_VOICE = "en-US-GuyNeural"
+tts_queue = []
+tts_lock = threading.Lock()
 
-def init_tts():
-    global tts_engine
-    try:
-        tts_engine = pyttsx3.init()
-        tts_engine.setProperty("rate", 165)
-        tts_engine.setProperty("volume", 0.9)
-        voices = tts_engine.getProperty("voices")
-        # Try to find a deeper voice
-        for voice in voices:
-            if "david" in voice.name.lower() or "mark" in voice.name.lower() or "male" in voice.name.lower():
-                tts_engine.setProperty("voice", voice.id)
-                break
-    except Exception as e:
-        console.print(f"[system]TTS init failed: {e}[/system]")
 
 def speak(text):
-    if not tts_enabled or tts_engine is None:
+    if not tts_enabled:
         return
-    def _speak():
-        try:
-            tts_engine.say(text)
-            tts_engine.runAndWait()
-        except Exception:
-            pass
-    threading.Thread(target=_speak, daemon=True).start()
+    threading.Thread(target=_speak_sync, args=(text,), daemon=True).start()
+
+
+def _speak_sync(text):
+    try:
+        with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
+            tmp_path = f.name
+
+        async def _generate():
+            communicate = edge_tts.Communicate(text, TTS_VOICE)
+            await communicate.save(tmp_path)
+
+        asyncio.run(_generate())
+
+        # Play using Windows built-in or ffmpeg
+        if sys.platform == "win32":
+            import winsound
+            # Convert mp3 to wav for winsound
+            wav_path = tmp_path.replace(".mp3", ".wav")
+            try:
+                subprocess.run(
+                    ["ffmpeg", "-y", "-i", tmp_path, wav_path],
+                    capture_output=True, timeout=10
+                )
+                winsound.PlaySound(wav_path, winsound.SND_FILENAME)
+                os.unlink(wav_path)
+            except Exception:
+                # Fallback: use PowerShell to play mp3
+                subprocess.run(
+                    ["powershell", "-c", f"(New-Object Media.SoundPlayer '{tmp_path}').PlaySync()"],
+                    capture_output=True, timeout=30
+                )
+        else:
+            subprocess.run(["mpg123", "-q", tmp_path], capture_output=True)
+
+        os.unlink(tmp_path)
+
+    except Exception as e:
+        console.print(f"[system]TTS error: {e}[/system]")
+
 
 def toggle_tts():
     global tts_enabled
@@ -145,28 +168,34 @@ def parse_memory(reply, profile):
     return clean_reply
 
 
-def print_trinity(text):
-    console.print(Panel(
-        Text(text, style="trinity"),
-        border_style="cyan",
-        title="[cyan]Trinity[/cyan]",
-        title_align="left",
-        padding=(0, 1)
-    ))
-    speak(text)
+def stream_chat(profile, conversation_history, summary_text="No previous conversations yet."):
+    full_reply = ""
+    console.print()
 
-
-def chat(profile, conversation_history, summary_text="No previous conversations yet."):
-    response = client.messages.create(
+    with client.messages.stream(
         model="claude-sonnet-4-6",
         max_tokens=1000,
         system=TRINITY_PROMPT.format(profile=profile, summaries=summary_text),
         messages=conversation_history
-    )
+    ) as stream:
+        # Stream text to a live panel
+        displayed = ""
+        with Live(
+            Panel(Text("", style="trinity"), border_style="cyan", title="[cyan]Trinity[/cyan]", title_align="left", padding=(0, 1)),
+            console=console,
+            refresh_per_second=15
+        ) as live:
+            for text in stream.text_stream:
+                full_reply += text
+                displayed += text
+                # Strip memory tags from display
+                display_clean = displayed.split("<memory>")[0].strip()
+                live.update(
+                    Panel(Text(display_clean, style="trinity"), border_style="cyan", title="[cyan]Trinity[/cyan]", title_align="left", padding=(0, 1))
+                )
 
-    raw_reply = response.content[0].text
-    clean_reply = parse_memory(raw_reply, profile)
-    print_trinity(clean_reply)
+    clean_reply = parse_memory(full_reply, profile)
+    speak(clean_reply)
     return clean_reply
 
 
@@ -254,8 +283,6 @@ def present_alerts_with_feedback(alerts, profile):
 
 
 def run():
-    init_tts()
-
     console.print(Panel(
         "[cyan]T R I N I T Y[/cyan]\n[dim]Personal Financial Intelligence[/dim]\n\n[system]Type [white]T[/white] to toggle voice · [white]exit[/white] to quit[/system]",
         border_style="cyan",
@@ -269,7 +296,8 @@ def run():
         name = Prompt.ask("\n[cyan]Trinity[/cyan] What would you like to call me?... Your name")
         profile = create_profile(name)
         opening = "Good to meet you. I'm Trinity — here to watch markets, surface signals, and help you think through what matters. What are you currently tracking?"
-        print_trinity(opening)
+        console.print(Panel(Text(opening, style="trinity"), border_style="cyan", title="[cyan]Trinity[/cyan]", title_align="left", padding=(0, 1)))
+        speak(opening)
         conversation_history = [
             {"role": "user", "content": f"My name is {name}"},
             {"role": "assistant", "content": opening}
@@ -293,7 +321,7 @@ def run():
         elif unseen_alerts:
             opening_message += "\n\nYou have new alerts since we last spoke — check them above."
 
-        reply = chat(profile, conversation_history + [{"role": "user", "content": opening_message}], summary_text)
+        reply = stream_chat(profile, conversation_history + [{"role": "user", "content": opening_message}], summary_text)
         conversation_history.append({"role": "user", "content": "Hey Trinity"})
         conversation_history.append({"role": "assistant", "content": reply})
 
@@ -310,7 +338,7 @@ def run():
             break
 
         conversation_history.append({"role": "user", "content": user_input})
-        reply = chat(profile, conversation_history, summary_text)
+        reply = stream_chat(profile, conversation_history, summary_text)
         conversation_history.append({"role": "assistant", "content": reply})
 
 

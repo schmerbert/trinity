@@ -10,3 +10,4 @@ feedparser
 pycoingecko
 rich
 pyttsx3
+edge-tts
