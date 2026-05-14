@@ -130,42 +130,52 @@ def scrape_news(profile):
     return alerts
 
 
+ddef resolve_token(name):
+    try:
+        url = f"https://api.dexscreener.com/latest/dex/search?q={name}"
+        response = requests.get(url, headers=HEADERS, timeout=10)
+        if response.status_code != 200:
+            return None
+        pairs = response.json().get("pairs", [])
+        if not pairs:
+            return None
+        # Take highest liquidity pair
+        pair = sorted(pairs, key=lambda x: float(x.get("liquidity", {}).get("usd", 0) or 0), reverse=True)[0]
+        return pair
+    except Exception as e:
+        print(f"[Eyes] Token resolve error for {name}: {e}")
+        return None
+
+
 def scrape_crypto_prices(profile):
     print("[Eyes] Checking crypto prices via DexScreener...")
     alerts = []
 
-    tokens = {
-        "troll": os.getenv("TROLL_CA"),
-        "wish": os.getenv("WISH_CA")
-    }
+    interests = profile.get("interests", [])
+    crypto_interests = [i for i in interests if i.get("category") == "crypto"]
 
-    for name, ca in tokens.items():
-        if not ca:
+    if not crypto_interests:
+        print("[Eyes] No crypto interests in profile yet.")
+        return alerts
+
+    for interest in crypto_interests:
+        name = interest.get("symbol") or interest.get("topic")
+        if not name:
             continue
+
         try:
-            url = f"https://api.dexscreener.com/latest/dex/tokens/{ca}"
-            response = requests.get(url, timeout=10)
-
-            if response.status_code != 200:
-                print(f"[Eyes] DexScreener error for {name}: {response.status_code}")
+            pair = resolve_token(name)
+            if not pair:
+                print(f"[Eyes] Could not resolve {name} on DexScreener")
                 continue
-
-            data = response.json()
-            pairs = data.get("pairs", [])
-
-            if not pairs:
-                print(f"[Eyes] No pairs found for {name}")
-                continue
-
-            pair = sorted(pairs, key=lambda x: float(x.get("liquidity", {}).get("usd", 0)), reverse=True)[0]
 
             token_name = pair.get("baseToken", {}).get("name", name)
             symbol = pair.get("baseToken", {}).get("symbol", name.upper())
-            price = float(pair.get("priceUsd", 0))
-            change_24h = float(pair.get("priceChange", {}).get("h24", 0))
-            volume_24h = float(pair.get("volume", {}).get("h24", 0))
-            liquidity = float(pair.get("liquidity", {}).get("usd", 0))
-            dex_url = pair.get("url", f"https://dexscreener.com/solana/{ca}")
+            price = float(pair.get("priceUsd", 0) or 0)
+            change_24h = float(pair.get("priceChange", {}).get("h24", 0) or 0)
+            volume_24h = float(pair.get("volume", {}).get("h24", 0) or 0)
+            liquidity = float(pair.get("liquidity", {}).get("usd", 0) or 0)
+            dex_url = pair.get("url", f"https://dexscreener.com/solana/{name}")
 
             summary = (
                 f"{token_name} ({symbol}) — "
@@ -178,7 +188,7 @@ def scrape_crypto_prices(profile):
             alerts.append({
                 "profile_id": profile["id"],
                 "source": "dexscreener",
-                "topic": name,
+                "topic": name.lower(),
                 "headline": f"{token_name} ({symbol}) at ${price:.8f} ({change_24h:+.2f}% 24h)",
                 "summary": summary,
                 "url": dex_url,

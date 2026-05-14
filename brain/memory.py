@@ -27,10 +27,26 @@ def update_profile(profile_id, updates):
     result = supabase.table("profiles").update(updates).eq("id", profile_id).execute()
     return result.data[0]
 
-def add_interest(profile_id, interest, weight=1.0):
+def add_interest(profile_id, interest, weight=1.0, category=None, symbol=None):
     profile = get_profile()
     interests = profile.get("interests", [])
-    interests.append({"topic": interest, "weight": weight})
+    
+    # Check if already exists
+    for existing in interests:
+        if existing.get("topic", "").lower() == interest.lower():
+            existing["weight"] = round(existing.get("weight", 1.0) + 0.1, 2)
+            if category:
+                existing["category"] = category
+            if symbol:
+                existing["symbol"] = symbol
+            return update_profile(profile_id, {"interests": interests})
+    
+    new_interest = {"topic": interest, "weight": weight}
+    if category:
+        new_interest["category"] = category
+    if symbol:
+        new_interest["symbol"] = symbol
+    interests.append(new_interest)
     return update_profile(profile_id, {"interests": interests})
 
 def add_feedback(profile_id, topic, sentiment):

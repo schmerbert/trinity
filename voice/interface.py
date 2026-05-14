@@ -141,6 +141,7 @@ Signal types:
 - {{"type": "risk", "value": "low/medium/high"}}
 - High engagement inferred: {{"type": "interest", "topic": "...", "weight": 1.5}}
 - Low engagement inferred: {{"type": "feedback", "topic": "...", "sentiment": "negative"}}
+- Crypto token mentioned: {{"type": "interest", "topic": "...", "weight": 1.0, "category": "crypto", "symbol": "..."}}
 
 Only add <memory> when there is a real signal. One per line inside the tags. Raw JSON only.
 """
@@ -162,7 +163,13 @@ def parse_memory(reply, profile):
             try:
                 memory = json.loads(line)
                 if memory["type"] == "interest":
-                    add_interest(profile_id, memory["topic"], memory.get("weight", 1.0))
+                    add_interest(
+                        profile_id,
+                        memory["topic"],
+                        memory.get("weight", 1.0),
+                        category=memory.get("category"),
+                        symbol=memory.get("symbol")
+                    )
                 elif memory["type"] == "feedback":
                     add_feedback(profile_id, memory["topic"], memory["sentiment"])
                 elif memory["type"] == "risk":
