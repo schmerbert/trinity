@@ -23,7 +23,9 @@ from brain.memory import (
     get_recent_summaries, get_unseen_alerts, mark_alerts_seen, process_feedback
 )
 
-load_dotenv()
+from pathlib import Path
+env_path = Path(__file__).parent.parent / '.env'
+load_dotenv(dotenv_path=env_path)
 
 # --- Theme ---
 trinity_theme = Theme({
