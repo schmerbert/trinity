@@ -36,7 +36,7 @@ trinity_theme = Theme({
 })
 
 console = Console(theme=trinity_theme)
-client = anthropic.Anthropic(api_key="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")
+client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 # --- TTS ---
 tts_enabled = True

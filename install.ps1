@@ -69,7 +69,7 @@ $envLines = @(
     "REDDIT_SUBREDDITS=$REDDIT_SUBREDDITS",
     "KEYWORDS=$KEYWORDS"
 )
-$envLines | Out-File -FilePath "$INSTALL_DIR\.env" -Encoding UTF8
+$envLines | Out-File -FilePath "$INSTALL_DIR\.env" -Encoding ASCII
 
 # --- Desktop Shortcut ---
 Write-Host "Creating desktop shortcut..." -ForegroundColor DarkGray
