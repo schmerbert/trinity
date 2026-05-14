@@ -71,6 +71,15 @@ $envLines = @(
 )
 $envLines | Out-File -FilePath "$INSTALL_DIR\.env" -Encoding ASCII
 
+# --- Strip BOM from .env ---
+Write-Host "Finalizing configuration..." -ForegroundColor DarkGray
+& "$INSTALL_DIR\venv\Scripts\python.exe" -c "
+content = open('.env', 'rb').read()
+if content.startswith(b'\xef\xbb\xbf'):
+    content = content[3:]
+open('.env', 'wb').write(content)
+"
+
 # --- Desktop Shortcut ---
 Write-Host "Creating desktop shortcut..." -ForegroundColor DarkGray
 $WshShell = New-Object -ComObject WScript.Shell
