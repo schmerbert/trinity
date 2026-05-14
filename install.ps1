@@ -12,7 +12,7 @@ Write-Host ""
 $REPO_URL = "https://github.com/schmerbert/trinity.git"
 $INSTALL_DIR = "$env:USERPROFILE\Trinity"
 $ANTHROPIC_KEY = "your_anthropic_key_here"
-$SUPABASE_URL = "https://eelcjityipyihvgokpcy.supabase.co"
+$SUPABASE_URL = "your_supabase_url_here"
 $SUPABASE_KEY = "your_supabase_key_here"
 $NEWS_API_KEY = "your_newsapi_key_here"
 $TROLL_CA = "your_troll_ca_here"
@@ -42,7 +42,7 @@ try {
 }
 
 # --- Clone or Update Repo ---
-Write-Host "Cloning Trinity..." -ForegroundColor DarkGray
+Write-Host "Fetching Trinity..." -ForegroundColor DarkGray
 if (Test-Path $INSTALL_DIR) {
     Write-Host "Existing install found. Updating..." -ForegroundColor Yellow
     Set-Location $INSTALL_DIR
@@ -59,13 +59,29 @@ python -m venv venv
 
 # --- Write .env ---
 Write-Host "Writing configuration..." -ForegroundColor DarkGray
-$envContent = "ANTHROPIC_API_KEY=$ANTHROPIC_KEY`nSUPABASE_URL=$SUPABASE_URL`nSUPABASE_KEY=$SUPABASE_KEY`nNEWS_API_KEY=$NEWS_API_KEY`nTROLL_CA=$TROLL_CA`nWISH_CA=$WISH_CA`nREDDIT_SUBREDDITS=$REDDIT_SUBREDDITS`nKEYWORDS=$KEYWORDS"
-$envContent | Out-File -FilePath "$INSTALL_DIR\.env" -Encoding UTF8
+$envLines = @(
+    "ANTHROPIC_API_KEY=$ANTHROPIC_KEY",
+    "SUPABASE_URL=$SUPABASE_URL",
+    "SUPABASE_KEY=$SUPABASE_KEY",
+    "NEWS_API_KEY=$NEWS_API_KEY",
+    "TROLL_CA=$TROLL_CA",
+    "WISH_CA=$WISH_CA",
+    "REDDIT_SUBREDDITS=$REDDIT_SUBREDDITS",
+    "KEYWORDS=$KEYWORDS"
+)
+$envLines | Out-File -FilePath "$INSTALL_DIR\.env" -Encoding UTF8
 
 # --- Create launch batch file ---
 Write-Host "Creating launcher..." -ForegroundColor DarkGray
-$launchScript = "@echo off`ncd /d $INSTALL_DIR`ncall venv\Scripts\activate.bat`npython eyes\scraper.py`npython voice\interface.py`npause"
-$launchScript | Out-File -FilePath "$INSTALL_DIR\trinity.bat" -Encoding ASCII
+$launchLines = @(
+    "@echo off",
+    "cd /d $INSTALL_DIR",
+    "call venv\Scripts\activate.bat",
+    "python eyes\scraper.py",
+    "python voice\interface.py",
+    "pause"
+)
+$launchLines | Out-File -FilePath "$INSTALL_DIR\trinity.bat" -Encoding ASCII
 
 # --- Desktop Shortcut ---
 Write-Host "Creating desktop shortcut..." -ForegroundColor DarkGray
