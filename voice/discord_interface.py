@@ -136,6 +136,51 @@ DISCORD_TOOLS = [
             },
             "required": ["guild_id"]
         }
+    },
+    {
+        "name": "create_category",
+        "description": "Create a channel category in Trinity's home server.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name":       {"type": "string"},
+                "visibility": {
+                    "type": "string",
+                    "enum": ["public", "owner_only", "trinity_only"],
+                    "description": "public: everyone. owner_only: owner + Trinity. trinity_only: Trinity only, hidden from all humans."
+                }
+            },
+            "required": ["name"]
+        }
+    },
+    {
+        "name": "create_channel",
+        "description": "Create a text channel in Trinity's home server.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name":        {"type": "string"},
+                "topic":       {"type": "string"},
+                "category_id": {"type": "string", "description": "Optional category ID to nest under"},
+                "visibility":  {
+                    "type": "string",
+                    "enum": ["public", "owner_only", "trinity_only"],
+                    "description": "public: everyone. owner_only: owner + Trinity. trinity_only: Trinity only, hidden from all humans."
+                }
+            },
+            "required": ["name"]
+        }
+    },
+    {
+        "name": "delete_channel",
+        "description": "Delete a channel or category from Trinity's home server.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "channel_id": {"type": "string"}
+            },
+            "required": ["channel_id"]
+        }
     }
 ]
 
@@ -235,6 +280,31 @@ async def _post_pending_alerts():
     # She will surface these when the owner messages her
     print(f"[Discord] {len(alerts)} unseen alert(s) queued")
 
+# ─── Permission helper ───────────────────────────────────────────────────────
+
+def _build_overwrites(guild: discord.Guild, visibility: str) -> dict:
+    overwrites = {}
+    if visibility in ("owner_only", "trinity_only"):
+        # Hide from everyone by default
+        overwrites[guild.default_role] = discord.PermissionOverwrite(view_channel=False)
+        # Always give Trinity full access
+        overwrites[guild.me] = discord.PermissionOverwrite(
+            view_channel=True, send_messages=True, read_message_history=True,
+            manage_messages=True
+        )
+        if visibility == "owner_only" and OWNER_ID:
+            owner_member = guild.get_member(OWNER_ID)
+            if owner_member:
+                overwrites[owner_member] = discord.PermissionOverwrite(view_channel=True)
+    return overwrites
+
+
+def _home_guild() -> discord.Guild | None:
+    profile = get_profile()
+    if not profile or not profile.get("discord_home_guild_id"):
+        return None
+    return bot.get_guild(int(profile["discord_home_guild_id"]))
+
 # ─── Tool execution ───────────────────────────────────────────────────────────
 
 async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list:
@@ -333,6 +403,61 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
                 "discord_home_guild_name": guild.name
             }).eq("id", profile_id).execute()
             return {"status": "home set", "server": guild.name}
+        except Exception as e:
+            return {"error": str(e)}
+
+    elif name == "create_category":
+        guild = _home_guild()
+        if not guild:
+            return {"error": "No home server set — use set_home_server first"}
+        visibility = inputs.get("visibility", "public")
+        overwrites = _build_overwrites(guild, visibility)
+        try:
+            cat = await guild.create_category(inputs["name"], overwrites=overwrites)
+            return {"status": "created", "category_id": str(cat.id), "name": cat.name, "visibility": visibility}
+        except discord.Forbidden:
+            return {"error": "Missing Manage Channels permission"}
+        except Exception as e:
+            return {"error": str(e)}
+
+    elif name == "create_channel":
+        guild = _home_guild()
+        if not guild:
+            return {"error": "No home server set — use set_home_server first"}
+        visibility = inputs.get("visibility", "public")
+        overwrites = _build_overwrites(guild, visibility)
+        category   = guild.get_channel(int(inputs["category_id"])) if inputs.get("category_id") else None
+        try:
+            channel = await guild.create_text_channel(
+                name=inputs["name"],
+                topic=inputs.get("topic", ""),
+                category=category,
+                overwrites=overwrites
+            )
+            return {
+                "status":     "created",
+                "channel_id": str(channel.id),
+                "name":       channel.name,
+                "visibility": visibility
+            }
+        except discord.Forbidden:
+            return {"error": "Missing Manage Channels permission"}
+        except Exception as e:
+            return {"error": str(e)}
+
+    elif name == "delete_channel":
+        guild   = _home_guild()
+        if not guild:
+            return {"error": "No home server set"}
+        channel = guild.get_channel(int(inputs["channel_id"]))
+        if not channel:
+            return {"error": "Channel not found"}
+        try:
+            name_snapshot = channel.name
+            await channel.delete()
+            return {"status": "deleted", "name": name_snapshot}
+        except discord.Forbidden:
+            return {"error": "Missing Manage Channels permission"}
         except Exception as e:
             return {"error": str(e)}
 
