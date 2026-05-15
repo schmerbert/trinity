@@ -564,24 +564,34 @@ async def before_autonomous():
 
 async def _call_trinity(prompt: str, messages: list, profile_id: str) -> str:
     loop = asyncio.get_event_loop()
+    retries = 0
 
     while True:
-        response = await loop.run_in_executor(
-            None,
-            lambda msgs=messages: ai_client.messages.create(
-                model="claude-sonnet-4-6",
-                max_tokens=1000,
-                system=prompt,
-                messages=msgs,
-                tools=DISCORD_TOOLS
+        try:
+            response = await loop.run_in_executor(
+                None,
+                lambda msgs=messages: ai_client.messages.create(
+                    model="claude-sonnet-4-6",
+                    max_tokens=1000,
+                    system=prompt,
+                    messages=msgs,
+                    tools=DISCORD_TOOLS
+                )
             )
-        )
+            retries = 0
+        except Exception as e:
+            if "rate_limit" in str(e).lower() or "429" in str(e):
+                wait = min(60 * (2 ** retries), 300)
+                print(f"[Discord] Rate limited — retrying in {wait}s")
+                await asyncio.sleep(wait)
+                retries += 1
+                continue
+            raise
 
         if response.stop_reason == "end_turn":
             return next((b.text for b in response.content if hasattr(b, "text")), "")
 
         if response.stop_reason == "tool_use":
-            # Serialize content blocks for message history
             assistant_content = [
                 {"type": b.type, "text": b.text} if b.type == "text"
                 else {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
@@ -598,6 +608,7 @@ async def _call_trinity(prompt: str, messages: list, profile_id: str) -> str:
                         "tool_use_id": block.id,
                         "content":     json.dumps(result)
                     })
+                    await asyncio.sleep(1)
 
             messages = messages + [{"role": "user", "content": tool_results}]
         else:
