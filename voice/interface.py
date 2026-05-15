@@ -189,19 +189,37 @@ def parse_memory(reply, profile):
 
 def stream_chat(profile, conversation_history, summary_text="No previous conversations yet."):
     full_reply = ""
+    max_retries = 3
 
-    with client.messages.stream(
-        model="claude-sonnet-4-6",
-        max_tokens=1000,
-        system=TRINITY_PROMPT.format(profile=profile, summaries=summary_text),
-        messages=conversation_history,
-        tools=[{
-            "type": "web_search_20250305",
-            "name": "web_search"
-        }]
-    ) as stream:
-        for text in stream.text_stream:
-            full_reply += text
+    for attempt in range(max_retries):
+        try:
+            with client.messages.stream(
+                model="claude-sonnet-4-6",
+                max_tokens=1000,
+                system=TRINITY_PROMPT.format(profile=profile, summaries=summary_text),
+                messages=conversation_history,
+                tools=[{
+                    "type": "web_search_20250305",
+                    "name": "web_search"
+                }]
+            ) as stream:
+                for text in stream.text_stream:
+                    full_reply += text
+            break
+
+        except Exception as e:
+            if "overloaded" in str(e).lower():
+                if attempt < max_retries - 1:
+                    console.print(f"[system]Servers are busy. Retrying in 10 seconds... ({attempt + 1}/{max_retries})[/system]")
+                    time.sleep(10)
+                    full_reply = ""
+                else:
+                    clean = "Servers are overloaded right now — not on my end. Give it a moment and try again."
+                    console.print(Panel(Text(clean, style="trinity"), border_style="cyan", title="[cyan]Trinity[/cyan]", title_align="left", padding=(0, 1)))
+                    speak(clean)
+                    return clean
+            else:
+                raise
 
     clean_reply = parse_memory(full_reply, profile)
 
