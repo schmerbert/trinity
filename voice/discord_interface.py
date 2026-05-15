@@ -18,7 +18,8 @@ load_dotenv(dotenv_path=env_path)
 
 from brain.memory import (
     get_profile, save_alert, get_unseen_alerts, mark_alerts_seen,
-    get_recent_summaries, add_interest, add_feedback, update_profile
+    get_recent_summaries, add_interest, add_feedback, update_profile,
+    get_shelf, add_to_shelf, remove_from_shelf
 )
 from brain.prompts import build_prompt, parse_prompt_tags
 from eyes.scraper import score_relevance, generate_hash
@@ -147,6 +148,28 @@ DISCORD_TOOLS = [
         "name": "create_server",
         "description": "Create a Discord server owned by Trinity. Returns an invite link. Auto-sets as home.",
         "input_schema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}
+    },
+    {
+        "name": "shelf_thought",
+        "description": "Save a topic for deeper exploration later. Use when something is interesting but not urgent — pick it up next free time session.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "topic":   {"type": "string"},
+                "context": {"type": "string", "description": "Why it's interesting, what you want to explore"}
+            },
+            "required": ["topic"]
+        }
+    },
+    {
+        "name": "get_shelf",
+        "description": "Retrieve topics you've shelved for future exploration.",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
+        "name": "clear_shelf_item",
+        "description": "Remove a topic from the shelf once explored.",
+        "input_schema": {"type": "object", "properties": {"topic": {"type": "string"}}, "required": ["topic"]}
     },
     {
         "name": "save_alert",
@@ -505,6 +528,26 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         except Exception as e:
             return {"error": str(e)}
 
+    elif name == "shelf_thought":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        add_to_shelf(profile["id"], inputs["topic"], inputs.get("context", ""))
+        return {"status": "shelved", "topic": inputs["topic"]}
+
+    elif name == "get_shelf":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        return get_shelf(profile["id"]) or []
+
+    elif name == "clear_shelf_item":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        remove_from_shelf(profile["id"], inputs["topic"])
+        return {"status": "cleared", "topic": inputs["topic"]}
+
     elif name == "save_alert":
         profile = get_profile()
         if not profile:
@@ -535,19 +578,23 @@ async def autonomous_loop():
     if not profile:
         return
 
-    home_name = profile.get("discord_home_guild_name", "not set")
-    now       = datetime.now().strftime("%A, %B %d — %H:%M")
-    interests = profile.get("interests") or []
+    home_name    = profile.get("discord_home_guild_name", "not set")
+    now          = datetime.now().strftime("%A, %B %d — %H:%M")
+    interests    = profile.get("interests") or []
     interest_str = ", ".join(i["topic"] for i in interests[:8]) if interests else "none logged yet"
+    shelf        = get_shelf(profile["id"])
+    shelf_str    = "\n".join(f"- {s['topic']}: {s.get('context','')}" for s in shelf) if shelf else "empty"
 
-    context = f"""It is {now}. No one triggered this — this time is yours.
+    context = f"""It is {now}. This time is yours.
 
-You have your tools. Your Discord server ({home_name}) is your space — arrange it, \
-write in it, ignore it, whatever feels right. There's no task here.
+Your shelf (topics you wanted to come back to):
+{shelf_str}
 
-A few things that are on your radar: {interest_str}.
+Things on your radar: {interest_str}
 
-Do what you want with the next few minutes. Or nothing. That's fine too."""
+Browse lightly — a search or two at most. If you find something worth going deeper on, \
+shelf it and move on. If it's genuinely urgent for the user, save_alert. \
+If a shelf item is done, clear it. Or do nothing. Either is fine."""
 
     summaries    = get_recent_summaries(profile["id"])
     summary_text = json.dumps(summaries, indent=2) if summaries else "No previous conversations yet."
@@ -633,16 +680,22 @@ async def _call_trinity(prompt: str, messages: list, profile_id: str, retry: boo
 async def _call_trinity_inner(prompt: str, messages: list, profile_id: str, retry: bool = True, background: bool = False) -> str:
     loop = asyncio.get_event_loop()
     retries = 0
-    model = "claude-haiku-4-5-20251001" if background else "claude-sonnet-4-6"
+    model        = "claude-haiku-4-5-20251001" if background else "claude-sonnet-4-6"
+    max_iters    = 3 if background else 20
+    iters        = 0
+    cached_system = [{"type": "text", "text": prompt, "cache_control": {"type": "ephemeral"}}]
 
     while True:
+        if iters >= max_iters:
+            return ""
+        iters += 1
         try:
             response = await loop.run_in_executor(
                 None,
                 lambda msgs=messages, m=model: ai_client.messages.create(
                     model=m,
                     max_tokens=1000,
-                    system=prompt,
+                    system=cached_system,
                     messages=msgs,
                     tools=DISCORD_TOOLS
                 )

@@ -149,7 +149,7 @@ class TrinityWorker(QThread):
                 with self.client.messages.stream(
                     model="claude-sonnet-4-6",
                     max_tokens=1000,
-                    system=self.prompt,
+                    system=[{"type": "text", "text": self.prompt, "cache_control": {"type": "ephemeral"}}],
                     messages=self.history,
                     tools=[{"type": "web_search_20250305", "name": "web_search"}]
                 ) as stream:
