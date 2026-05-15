@@ -192,6 +192,28 @@ async def on_message(message: discord.Message):
     if (is_dm or is_mention) and message.author.id == OWNER_ID:
         await _respond(message)
 
+
+@bot.event
+async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
+    if payload.user_id != OWNER_ID:
+        return
+    if payload.user_id == bot.user.id:
+        return
+
+    channel = bot.get_channel(payload.channel_id)
+    if not channel:
+        return
+
+    try:
+        message = await channel.fetch_message(payload.message_id)
+    except Exception:
+        return
+
+    if message.author.id != bot.user.id:
+        return
+
+    await _handle_reaction(message, str(payload.emoji))
+
 # ─── Channel watch list ───────────────────────────────────────────────────────
 
 async def _load_watched_channels():
@@ -708,6 +730,55 @@ async def _respond(message: discord.Message):
 
         for chunk in [clean[i:i + 1900] for i in range(0, len(clean), 1900)]:
             await message.reply(chunk)
+
+# ─── Reaction handler ────────────────────────────────────────────────────────
+
+async def _handle_reaction(message: discord.Message, emoji: str):
+    profile = get_profile()
+    if not profile:
+        return
+
+    context = f"""The user reacted to your message with {emoji}.
+
+Your message was:
+\"\"\"{message.content[:600]}\"\"\"
+
+Guidelines:
+- 👍 ✅ 🔥 ⭐ = positive signal — note it in memory, brief acknowledgment
+- 👎 ❌ 🗑️ = negative — note it, maybe ask what was off (once, not every time)
+- 🤔 = they're thinking or skeptical — leave space for it
+- 😂 🤣 💀 = they found it funny — match their energy, stay dry
+- 🍆 🌶️ and other nonsense = pure humor — play along, don't explain the joke
+- 🚀 = bullish/excited about the topic
+- 🐻 = skeptical/bearish
+- ❤️ = they liked it a lot
+
+Keep your response short — one or two sentences. Don't over-explain the emoji back to them."""
+
+    summaries    = get_recent_summaries(profile["id"])
+    summary_text = json.dumps(summaries, indent=2) if summaries else ""
+    prompt       = build_prompt(profile, summary_text, [], discord_mode=True)
+
+    async def keep_typing():
+        while True:
+            await message.channel.typing()
+            await asyncio.sleep(8)
+
+    typing_task = asyncio.create_task(keep_typing())
+    try:
+        reply = await _call_trinity(prompt, [{"role": "user", "content": context}], profile["id"])
+    except Exception as e:
+        typing_task.cancel()
+        return
+    finally:
+        typing_task.cancel()
+
+    clean = parse_prompt_tags(reply, profile["id"])
+    clean = _strip_memory(clean, profile)
+    clean = re.sub(r'<memory>.*?</memory>', '', clean, flags=re.DOTALL).strip()
+    if clean:
+        await message.reply(clean)
+
 
 # ─── Memory parsing ───────────────────────────────────────────────────────────
 
