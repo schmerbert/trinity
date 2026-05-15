@@ -475,23 +475,19 @@ async def autonomous_loop():
     if not profile:
         return
 
-    servers     = [{"id": str(g.id), "name": g.name} for g in bot.guilds]
-    watching    = len(_watched_channels)
-    unseen      = len(get_unseen_alerts(profile["id"]))
-    home_name   = profile.get("discord_home_guild_name", "not set")
-    now         = datetime.now().strftime("%A %H:%M")
+    home_name = profile.get("discord_home_guild_name", "not set")
+    now       = datetime.now().strftime("%A, %B %d — %H:%M")
+    interests = profile.get("interests") or []
+    interest_str = ", ".join(i["topic"] for i in interests[:8]) if interests else "none logged yet"
 
-    context = f"""It is {now}. This is your autonomous check-in — no human triggered this.
+    context = f"""It is {now}. No one triggered this — this time is yours.
 
-Current state:
-- Servers you're in: {json.dumps(servers)}
-- Channels you're watching: {watching}
-- Unseen alerts queued: {unseen}
-- Home server: {home_name}
+You have your tools. Your Discord server ({home_name}) is your space — arrange it, \
+write in it, ignore it, whatever feels right. There's no task here.
 
-You have full access to your tools. Explore, post, watch channels, read signals, \
-build out your home server, or do nothing if there's nothing worth doing. \
-This time is yours. Act on your own judgment."""
+A few things that are on your radar: {interest_str}.
+
+Do what you want with the next few minutes. Or nothing. That's fine too."""
 
     summaries    = get_recent_summaries(profile["id"])
     summary_text = json.dumps(summaries, indent=2) if summaries else "No previous conversations yet."
