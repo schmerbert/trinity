@@ -733,51 +733,30 @@ async def _respond(message: discord.Message):
 
 # ─── Reaction handler ────────────────────────────────────────────────────────
 
+_POSITIVE_EMOJI = {"👍","✅","🔥","⭐","🚀","❤️","😍","💯","🎯","🙌","💪","📈"}
+_NEGATIVE_EMOJI = {"👎","❌","🗑️","🐻","😬","💀","📉","🤦"}
+_NEUTRAL_EMOJI  = {"🤔","😐","🤷"}
+
 async def _handle_reaction(message: discord.Message, emoji: str):
     profile = get_profile()
     if not profile:
         return
 
-    context = f"""The user reacted to your message with {emoji}.
+    # Derive a topic from the channel name and first line of the message
+    topic = message.channel.name if hasattr(message.channel, "name") else "general"
+    first_line = message.content.split("\n")[0][:80] if message.content else topic
 
-Your message was:
-\"\"\"{message.content[:600]}\"\"\"
+    if emoji in _POSITIVE_EMOJI:
+        sentiment = "positive"
+    elif emoji in _NEGATIVE_EMOJI:
+        sentiment = "negative"
+    elif emoji in _NEUTRAL_EMOJI:
+        sentiment = "neutral"
+    else:
+        sentiment = "positive"  # absurdist reactions (🍆 etc) = engagement = positive
 
-Guidelines:
-- 👍 ✅ 🔥 ⭐ = positive signal — note it in memory, brief acknowledgment
-- 👎 ❌ 🗑️ = negative — note it, maybe ask what was off (once, not every time)
-- 🤔 = they're thinking or skeptical — leave space for it
-- 😂 🤣 💀 = they found it funny — match their energy, stay dry
-- 🍆 🌶️ and other nonsense = pure humor — play along, don't explain the joke
-- 🚀 = bullish/excited about the topic
-- 🐻 = skeptical/bearish
-- ❤️ = they liked it a lot
-
-Keep your response short — one or two sentences. Don't over-explain the emoji back to them."""
-
-    summaries    = get_recent_summaries(profile["id"])
-    summary_text = json.dumps(summaries, indent=2) if summaries else ""
-    prompt       = build_prompt(profile, summary_text, [], discord_mode=True)
-
-    async def keep_typing():
-        while True:
-            await message.channel.typing()
-            await asyncio.sleep(8)
-
-    typing_task = asyncio.create_task(keep_typing())
-    try:
-        reply = await _call_trinity(prompt, [{"role": "user", "content": context}], profile["id"])
-    except Exception as e:
-        typing_task.cancel()
-        return
-    finally:
-        typing_task.cancel()
-
-    clean = parse_prompt_tags(reply, profile["id"])
-    clean = _strip_memory(clean, profile)
-    clean = re.sub(r'<memory>.*?</memory>', '', clean, flags=re.DOTALL).strip()
-    if clean:
-        await message.reply(clean)
+    add_feedback(profile["id"], first_line, sentiment)
+    print(f"[Discord] Reaction {emoji} on '{first_line[:40]}' → {sentiment}")
 
 
 # ─── Memory parsing ───────────────────────────────────────────────────────────
