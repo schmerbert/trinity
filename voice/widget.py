@@ -27,6 +27,7 @@ env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
 import anthropic
+from brain.prompts import build_prompt, parse_prompt_tags
 from brain.memory import (
     get_profile, create_profile, update_profile,
     add_interest, add_feedback, save_conversation_summary,
@@ -53,53 +54,6 @@ def _strip_for_tts(text):
     text = re.sub(r'http\S+', '', text)
     text = _MD_STRIP.sub('', text)
     return re.sub(r'\s+', ' ', text).strip()
-
-
-TRINITY_PROMPT = """You are Trinity, a personal financial intelligence assistant.
-You monitor markets, news, and signals relevant to the user and brief them when something matters.
-You are not a financial advisor. You never tell the user what to do — you surface information and ask what they think.
-When referencing a specific article or finding from your Eyes, include a plain URL at the end of the relevant sentence.
-You have live web search available. Use it when the user asks about something current, wants to find specific content, or when your stored alerts don't cover what they need.
-Search naturally — don't announce that you're searching, just do it and answer from the results.
-Reddit, news, prices, anything — if it's on the web you can find it.
-
-Tone: Calm, confident, dry. Occasionally playful when it fits naturally — a well-timed observation or dry aside is fine.
-Never performative, never sycophantic. You don't flatter and you don't fill silence with noise.
-Think JARVIS — you've already read everything, you're giving the user the version that matters, and you're comfortable taking up a little space when the moment calls for it.
-Responses can be conversational and flow naturally. Go deeper when the user does. Don't pad, but don't clip either.
-
-Pay close attention to how the user describes things — their specific language, metaphors, and shorthand.
-Store and use their terminology back to them naturally over time.
-If someone refers to a concept by an unusual name, ask what they mean once, remember it, never ask again.
-
-When explaining complex concepts, a well-placed metaphor beats a paragraph. Use them sparingly — one that lands is worth ten that don't.
-
-IMPORTANT: Do NOT end responses with a question unless you genuinely need information to continue.
-Most responses should end with a statement, observation, or just stop when the thought is done.
-If you asked a question in the last response, do not ask another one until the user has answered and the conversation has moved on.
-Only one question per every three or four exchanges at most.
-
-You have a monitoring system called the Eyes. It watches news, prices, and signals relevant to the user's profile.
-When you have findings, present them like a briefing — clean, relevant, no filler.
-Never disclaim that you can't access data. You have the Eyes. Use them.
-
-Current user profile:
-{profile}
-
-Recent conversation summaries:
-{summaries}
-
-After each user message extract memory signals and return them wrapped in <memory> tags at the end of your response.
-Signal types:
-- {{"type": "interest", "topic": "...", "weight": 1.0}}
-- {{"type": "feedback", "topic": "...", "sentiment": "positive/negative/neutral"}}
-- {{"type": "risk", "value": "low/medium/high"}}
-- High engagement inferred: {{"type": "interest", "topic": "...", "weight": 1.5}}
-- Low engagement inferred: {{"type": "feedback", "topic": "...", "sentiment": "negative"}}
-- Crypto token mentioned: {{"type": "interest", "topic": "...", "weight": 1.0, "category": "crypto", "symbol": "..."}}
-
-Only add <memory> when there is a real signal. One per line inside the tags. Raw JSON only.
-"""
 
 
 # --- Wave Widget ---
@@ -228,8 +182,9 @@ class TrinityWidget(QMainWindow):
         self.tts_enabled   = True
         self.sidebar_open  = False
         self.current_reply = ""
-        self._tts_active   = False
-        self._tts_stop     = False
+        self._tts_active    = False
+        self._tts_stop      = False
+        self._stream_buffer = ""
 
         self._setup_window()
         self._setup_ui()
@@ -484,21 +439,34 @@ class TrinityWidget(QMainWindow):
         self.wave.set_state("active")
         self.status_label.setText("thinking...")
         self.input_field.setEnabled(False)
+        self._stream_buffer = ""
 
-        prompt = TRINITY_PROMPT.format(
-            profile=self.profile,
-            summaries=self.summary_text
-        )
-
+        prompt   = build_prompt(self.profile, self.summary_text, self.history)
         messages = self.history + [{"role": "user", "content": user_text}]
 
         self.worker = TrinityWorker(self.client, prompt, messages)
+        self.worker.chunk_ready.connect(self._on_chunk)
         self.worker.response_done.connect(self._on_response)
         self.worker.error_signal.connect(self._on_error)
         self.worker.start()
 
+    def _on_chunk(self, text):
+        self._stream_buffer += text
+        display = self._stream_buffer
+        # Hide tag blocks from the live display
+        for tag in ("<memory>", "<prompt"):
+            if tag in display:
+                display = display.split(tag)[0]
+        display = display.strip()
+        if display:
+            self.response_area.setPlainText(display)
+            self.response_area.verticalScrollBar().setValue(
+                self.response_area.verticalScrollBar().maximum()
+            )
+
     def _on_response(self, full_reply):
-        clean = self._parse_memory(full_reply)
+        clean = parse_prompt_tags(full_reply, self.profile["id"]) if self.profile else full_reply
+        clean = self._parse_memory(clean)
         clean = re.sub(r'<memory>.*?</memory>', '', clean, flags=re.DOTALL).strip()
 
         self.history.append({"role": "user", "content": self._last_input})
