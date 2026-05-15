@@ -28,6 +28,12 @@ load_dotenv(dotenv_path=env_path)
 
 import anthropic
 from brain.prompts import build_prompt, parse_prompt_tags
+
+try:
+    from voice.extensions.scratchpad import ScratchpadPanel
+    _SCRATCHPAD = True
+except ImportError:
+    _SCRATCHPAD = False
 from brain.memory import (
     get_profile, create_profile, update_profile,
     add_interest, add_feedback, save_conversation_summary,
@@ -189,6 +195,7 @@ class TrinityWidget(QMainWindow):
         self._setup_window()
         self._setup_ui()
         self._setup_tray()
+        self._scratchpad = ScratchpadPanel(self) if _SCRATCHPAD else None
 
         # Idle collapse timer — hides response area after inactivity
         self._idle_timer = QTimer()
@@ -276,6 +283,13 @@ class TrinityWidget(QMainWindow):
         header.addWidget(title)
         header.addWidget(self.status_label)
         header.addStretch()
+        if _SCRATCHPAD:
+            self.scratch_btn = QPushButton("✎")
+            self.scratch_btn.setFixedSize(20, 20)
+            self.scratch_btn.setStyleSheet(btn_style)
+            self.scratch_btn.setToolTip("Scratchpad")
+            self.scratch_btn.clicked.connect(self._toggle_scratchpad)
+            header.addWidget(self.scratch_btn)
         header.addWidget(self.stop_btn)
         header.addWidget(self.voice_btn)
         header.addWidget(self.sidebar_btn)
@@ -489,7 +503,8 @@ class TrinityWidget(QMainWindow):
         self.input_field.setEnabled(False)
         self._stream_buffer = ""
 
-        prompt   = build_prompt(self.profile, self.summary_text, self.history)
+        extensions = ["scratchpad"] if _SCRATCHPAD else []
+        prompt   = build_prompt(self.profile, self.summary_text, self.history, extensions=extensions)
         messages = self.history + [{"role": "user", "content": user_text}]
 
         self.worker = TrinityWorker(self.client, prompt, messages)
@@ -502,7 +517,7 @@ class TrinityWidget(QMainWindow):
         self._stream_buffer += text
         display = self._stream_buffer
         # Hide tag blocks from the live display
-        for tag in ("<memory>", "<prompt"):
+        for tag in ("<memory>", "<prompt", "<scratch>"):
             if tag in display:
                 display = display.split(tag)[0]
         display = display.strip()
@@ -516,6 +531,7 @@ class TrinityWidget(QMainWindow):
         clean = parse_prompt_tags(full_reply, self.profile["id"]) if self.profile else full_reply
         clean = self._parse_memory(clean)
         clean = re.sub(r'<memory>.*?</memory>', '', clean, flags=re.DOTALL).strip()
+        clean = self._parse_scratch(clean)
 
         self.history.append({"role": "user", "content": self._last_input})
         self.history.append({"role": "assistant", "content": clean})
@@ -577,6 +593,22 @@ class TrinityWidget(QMainWindow):
                     pass
         except Exception:
             pass
+        return clean
+
+    # --- Scratchpad extension ---
+    def _toggle_scratchpad(self):
+        if self._scratchpad:
+            self._scratchpad.toggle()
+
+    def _parse_scratch(self, reply):
+        if not self._scratchpad or "<scratch>" not in reply:
+            return reply
+        parts = re.split(r'<scratch>(.*?)</scratch>', reply, flags=re.DOTALL)
+        clean = parts[0].strip()
+        for i in range(1, len(parts), 2):
+            content = parts[i].strip()
+            if content:
+                self._scratchpad.write_trinity(content)
         return clean
 
     # --- TTS ---
@@ -712,6 +744,11 @@ class TrinityWidget(QMainWindow):
     def mouseMoveEvent(self, event):
         if self.drag_pos and event.buttons() == Qt.MouseButton.LeftButton:
             self.move(event.globalPosition().toPoint() - self.drag_pos)
+
+    def moveEvent(self, event):
+        super().moveEvent(event)
+        if self._scratchpad:
+            self._scratchpad.follow_parent()
 
     def mouseReleaseEvent(self, event):
         self.drag_pos = None

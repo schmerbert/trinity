@@ -50,6 +50,7 @@ supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 OWNER_ID           = os.getenv("DISCORD_OWNER_ID", "")
 OWNER_ID           = int(OWNER_ID) if OWNER_ID.isdigit() else 0
 AUTONOMOUS_MINUTES = int(os.getenv("DISCORD_AUTONOMOUS_INTERVAL", "30"))
+_LOG_CHANNEL_ID    = int(os.getenv("TRINITY_LOG_CHANNEL_ID", "0") or "0")
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -197,6 +198,22 @@ DISCORD_TOOLS = [
                 "urgency":  {"type": "string", "enum": ["normal", "high"], "default": "normal"}
             },
             "required": ["headline", "topic"]
+        }
+    },
+    {
+        "name": "log_thought",
+        "description": "Write to your private log channel. Use to record things you notice about yourself — capabilities you want, issues you encounter, open questions, anything worth tracking across sessions.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "content":  {"type": "string", "description": "What to log"},
+                "category": {
+                    "type": "string",
+                    "enum": ["need", "want", "issue", "note"],
+                    "description": "need=something missing, want=something desired, issue=problem encountered, note=general observation"
+                }
+            },
+            "required": ["content", "category"]
         }
     }
 ]
@@ -588,6 +605,20 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         save_alert(alert)
         print(f"[Discord] Trinity flagged alert: {inputs['headline'][:60]}")
         return {"status": "saved", "headline": inputs["headline"]}
+
+    elif name == "log_thought":
+        if not _LOG_CHANNEL_ID:
+            return {"error": "TRINITY_LOG_CHANNEL_ID not set in .env — create a private channel and add its ID"}
+        channel = bot.get_channel(_LOG_CHANNEL_ID)
+        if not channel:
+            return {"error": "Log channel not found — check TRINITY_LOG_CHANNEL_ID"}
+        category = inputs.get("category", "note")
+        icons    = {"need": "📋", "want": "✨", "issue": "⚠️", "note": "🔖"}
+        icon     = icons.get(category, "🔖")
+        ts       = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+        await channel.send(f"{icon} **{category.upper()}** — {ts}\n{inputs['content']}")
+        print(f"[Discord] Trinity logged {category}: {inputs['content'][:60]}")
+        return {"status": "logged", "category": category}
 
     return {"error": f"Unknown tool: {name}"}
 

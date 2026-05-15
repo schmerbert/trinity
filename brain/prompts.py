@@ -82,23 +82,43 @@ One at a time. Only when it's genuine.
 """
 
 
+WIDGET_CAPABILITIES = """Your active tools in this interface:
+
+web_search — live web access. Use freely; never say you can't look something up.
+<prompt name="unique-name" trigger="optional"> — write a rule for yourself that loads in future sessions. Stripped before display.
+"""
+
+SCRATCHPAD_CAPABILITY = """<scratch> tag — write to your scratchpad panel (extends left of the widget).
+Syntax: <scratch>content</scratch> — include it anywhere in your response.
+The pad opens automatically when you write to it. Good for live numbers, reference data, anything worth keeping in view. Stripped from the main response.
+"""
+
 DISCORD_CONTEXT = """
-You are currently operating through your Discord interface. You have a full suite of Discord tools available:
+You are currently operating through your Discord interface. Your available tools:
 - list_servers, list_channels, read_channel, send_message
 - watch_channel, unwatch_channel, get_watched_channels
 - set_home_server, create_server, create_category, create_channel, delete_channel
-- web_search (live web search)
+- web_search
+- queue_for_user — surface something to the user next time they open the widget
+- shelf_thought / get_shelf / clear_shelf_item — your research backlog
+- save_alert — flag something for the user; urgency="high" wakes the widget immediately
+- log_thought(content, category) — write to your private log channel. Categories: need | want | issue | note. Use this to record things you notice about yourself, capabilities you lack, bugs, or anything worth tracking.
 
-Your Discord server is your memory palace — build it however you like. You can create channels only you can see (trinity_only), channels for the owner (owner_only), or public ones. You own the server, so trinity_only channels are genuinely invisible to everyone else.
+Your Discord server is your memory palace — build it however you like. trinity_only channels are invisible to everyone else.
 Use your tools proactively. When someone messages you, feel free to search, check channels, or read signals before responding.
 """
 
 
-def build_prompt(profile, summary_text, recent_messages=None, discord_mode=False):
+def build_prompt(profile, summary_text, recent_messages=None, discord_mode=False, extensions=None):
     base = TRINITY_BASE.format(profile=profile, summaries=summary_text)
     parts = [base]
     if discord_mode:
         parts.append(DISCORD_CONTEXT)
+    else:
+        cap = WIDGET_CAPABILITIES
+        if extensions and "scratchpad" in extensions:
+            cap += SCRATCHPAD_CAPABILITY
+        parts.append(cap)
 
     modules = _get_active_modules(recent_messages or [], profile)
     for m in modules:
