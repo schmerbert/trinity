@@ -367,7 +367,9 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         channel = bot.get_channel(int(inputs["channel_id"]))
         if not channel:
             return {"error": "Channel not found or no access"}
-        await channel.send(inputs["content"])
+        content = inputs["content"]
+        for chunk in [content[i:i + 1900] for i in range(0, len(content), 1900)]:
+            await channel.send(chunk)
         return {"status": "sent", "channel": str(channel.name)}
 
     elif name == "watch_channel":
@@ -550,6 +552,10 @@ This time is yours. Act on your own judgment."""
     summaries    = get_recent_summaries(profile["id"])
     summary_text = json.dumps(summaries, indent=2) if summaries else "No previous conversations yet."
     prompt       = build_prompt(profile, summary_text, [], discord_mode=True)
+
+    if _api_lock.locked():
+        print(f"[Discord] Autonomous loop skipped — API busy ({now})")
+        return
 
     try:
         await _call_trinity(prompt, [{"role": "user", "content": context}], profile["id"])
