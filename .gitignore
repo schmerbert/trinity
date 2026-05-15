@@ -1,3 +1,11 @@
 .env
+*Copy*.env
+* - Copy.env
+*.env.bak
+*.env.backup
+trinity_backup_*.json
+trinity_eyes.log
 __pycache__/
 *.pyc
+venv/
+*.log
