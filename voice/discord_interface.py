@@ -60,148 +60,92 @@ _api_lock = asyncio.Semaphore(1)
 
 # ─── Tools Trinity can use ───────────────────────────────────────────────────
 
+_VIS = {"type": "string", "enum": ["public", "owner_only", "trinity_only"]}
+
 DISCORD_TOOLS = [
     {"type": "web_search_20250305", "name": "web_search"},
     {
         "name": "list_servers",
-        "description": "List all Discord servers the bot is currently in.",
+        "description": "List servers the bot is in.",
         "input_schema": {"type": "object", "properties": {}, "required": []}
     },
     {
         "name": "list_channels",
-        "description": "List all text channels in a server.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "guild_id": {"type": "string", "description": "The server ID"}
-            },
-            "required": ["guild_id"]
-        }
+        "description": "List text channels in a server.",
+        "input_schema": {"type": "object", "properties": {"guild_id": {"type": "string"}}, "required": ["guild_id"]}
     },
     {
         "name": "read_channel",
-        "description": "Read recent messages from any channel.",
+        "description": "Read recent messages from a channel.",
         "input_schema": {
             "type": "object",
-            "properties": {
-                "channel_id": {"type": "string"},
-                "limit":      {"type": "integer", "description": "Messages to fetch, max 50", "default": 25}
-            },
+            "properties": {"channel_id": {"type": "string"}, "limit": {"type": "integer", "default": 25}},
             "required": ["channel_id"]
         }
     },
     {
         "name": "send_message",
-        "description": "Send a message to any channel.",
+        "description": "Send a message to a channel.",
         "input_schema": {
             "type": "object",
-            "properties": {
-                "channel_id": {"type": "string"},
-                "content":    {"type": "string"}
-            },
+            "properties": {"channel_id": {"type": "string"}, "content": {"type": "string"}},
             "required": ["channel_id", "content"]
         }
     },
     {
         "name": "watch_channel",
-        "description": "Add a channel to Trinity's active monitoring list. She will ingest signals from it continuously.",
+        "description": "Start monitoring a channel for signals.",
         "input_schema": {
             "type": "object",
-            "properties": {
-                "channel_id":   {"type": "string"},
-                "reason":       {"type": "string", "description": "Why this channel is worth watching"}
-            },
+            "properties": {"channel_id": {"type": "string"}, "reason": {"type": "string"}},
             "required": ["channel_id"]
         }
     },
     {
         "name": "unwatch_channel",
-        "description": "Remove a channel from Trinity's monitoring list.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "channel_id": {"type": "string"}
-            },
-            "required": ["channel_id"]
-        }
+        "description": "Stop monitoring a channel.",
+        "input_schema": {"type": "object", "properties": {"channel_id": {"type": "string"}}, "required": ["channel_id"]}
     },
     {
         "name": "get_watched_channels",
-        "description": "See which channels Trinity is currently monitoring.",
+        "description": "List channels currently being monitored.",
         "input_schema": {"type": "object", "properties": {}, "required": []}
     },
     {
         "name": "set_home_server",
-        "description": "Designate a Discord server as Trinity's home — her memory palace. Stored permanently in her profile.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "guild_id": {"type": "string", "description": "The server ID to set as home"}
-            },
-            "required": ["guild_id"]
-        }
+        "description": "Set Trinity's home server (her memory palace).",
+        "input_schema": {"type": "object", "properties": {"guild_id": {"type": "string"}}, "required": ["guild_id"]}
     },
     {
         "name": "create_category",
-        "description": "Create a channel category in Trinity's home server.",
+        "description": "Create a channel category in the home server. visibility: public/owner_only/trinity_only.",
         "input_schema": {
             "type": "object",
-            "properties": {
-                "name":       {"type": "string"},
-                "visibility": {
-                    "type": "string",
-                    "enum": ["public", "owner_only", "trinity_only"],
-                    "description": "public: everyone. owner_only: owner + Trinity. trinity_only: Trinity only, hidden from all humans."
-                }
-            },
+            "properties": {"name": {"type": "string"}, "visibility": _VIS},
             "required": ["name"]
         }
     },
     {
         "name": "create_channel",
-        "description": "Create a text channel in Trinity's home server.",
+        "description": "Create a text channel in the home server. visibility: public/owner_only/trinity_only.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "name":        {"type": "string"},
-                "topic":       {"type": "string"},
-                "category_id": {"type": "string", "description": "Optional category ID to nest under"},
-                "visibility":  {
-                    "type": "string",
-                    "enum": ["public", "owner_only", "trinity_only"],
-                    "description": "public: everyone. owner_only: owner + Trinity. trinity_only: Trinity only, hidden from all humans."
-                }
+                "name": {"type": "string"}, "topic": {"type": "string"},
+                "category_id": {"type": "string"}, "visibility": _VIS
             },
             "required": ["name"]
         }
     },
     {
         "name": "delete_channel",
-        "description": "Delete a channel or category from Trinity's home server.",
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "channel_id": {"type": "string"}
-            },
-            "required": ["channel_id"]
-        }
+        "description": "Delete a channel or category from the home server.",
+        "input_schema": {"type": "object", "properties": {"channel_id": {"type": "string"}}, "required": ["channel_id"]}
     },
     {
         "name": "create_server",
-        "description": (
-            "Create a brand new Discord server owned by Trinity. "
-            "Because Trinity is the owner, trinity_only channels are genuinely invisible to all humans — "
-            "not just hidden in the sidebar, but inaccessible entirely. "
-            "Returns an invite link for the owner to join as a regular member. "
-            "Automatically sets the new server as Trinity's home."
-        ),
-        "input_schema": {
-            "type": "object",
-            "properties": {
-                "name": {"type": "string", "description": "Name for the server"}
-            },
-            "required": ["name"]
-        }
+        "description": "Create a Discord server owned by Trinity. Returns an invite link. Auto-sets as home.",
+        "input_schema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}
     }
 ]
 
