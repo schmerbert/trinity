@@ -19,7 +19,8 @@ load_dotenv(dotenv_path=env_path)
 from brain.memory import (
     get_profile, save_alert, get_unseen_alerts, mark_alerts_seen,
     get_recent_summaries, add_interest, add_feedback, update_profile,
-    get_shelf, add_to_shelf, remove_from_shelf
+    get_shelf, add_to_shelf, remove_from_shelf,
+    get_queued_thoughts, queue_thought, clear_queued_thoughts
 )
 from brain.prompts import build_prompt, parse_prompt_tags
 from eyes.scraper import score_relevance, generate_hash
@@ -148,6 +149,18 @@ DISCORD_TOOLS = [
         "name": "create_server",
         "description": "Create a Discord server owned by Trinity. Returns an invite link. Auto-sets as home.",
         "input_schema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}
+    },
+    {
+        "name": "queue_for_user",
+        "description": "Queue something to surface to the user next time they open the widget. Not urgent — just worth mentioning when they're around.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "thought":  {"type": "string", "description": "What you want to surface"},
+                "context":  {"type": "string", "description": "Why it's worth mentioning"}
+            },
+            "required": ["thought"]
+        }
     },
     {
         "name": "shelf_thought",
@@ -528,6 +541,14 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         except Exception as e:
             return {"error": str(e)}
 
+    elif name == "queue_for_user":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        queue_thought(profile["id"], inputs["thought"], inputs.get("context", ""))
+        print(f"[Discord] Trinity queued for user: {inputs['thought'][:60]}")
+        return {"status": "queued", "thought": inputs["thought"]}
+
     elif name == "shelf_thought":
         profile = get_profile()
         if not profile:
@@ -572,29 +593,23 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
 
 # ─── Autonomous loop ─────────────────────────────────────────────────────────
 
-@tasks.loop(minutes=30)
+@tasks.loop(minutes=60)
 async def autonomous_loop():
     profile = get_profile()
     if not profile:
         return
 
-    home_name    = profile.get("discord_home_guild_name", "not set")
-    now          = datetime.now().strftime("%A, %B %d — %H:%M")
-    interests    = profile.get("interests") or []
-    interest_str = ", ".join(i["topic"] for i in interests[:8]) if interests else "none logged yet"
-    shelf        = get_shelf(profile["id"])
-    shelf_str    = "\n".join(f"- {s['topic']}: {s.get('context','')}" for s in shelf) if shelf else "empty"
+    now       = datetime.now().strftime("%A, %B %d — %H:%M")
+    interests = profile.get("interests") or []
+    shelf     = get_shelf(profile["id"])
 
-    context = f"""It is {now}. This time is yours.
+    shelf_str    = "\n".join(f"- {s['topic']}: {s.get('context','')}" for s in shelf) if shelf else "nothing shelved"
+    interest_str = ", ".join(i["topic"] for i in interests[:8]) if interests else "none yet"
 
-Your shelf (topics you wanted to come back to):
-{shelf_str}
+    context = f"""{now}
 
-Things on your radar: {interest_str}
-
-Browse lightly — a search or two at most. If you find something worth going deeper on, \
-shelf it and move on. If it's genuinely urgent for the user, save_alert. \
-If a shelf item is done, clear it. Or do nothing. Either is fine."""
+Shelf: {shelf_str}
+Radar: {interest_str}"""
 
     summaries    = get_recent_summaries(profile["id"])
     summary_text = json.dumps(summaries, indent=2) if summaries else "No previous conversations yet."
@@ -681,7 +696,7 @@ async def _call_trinity_inner(prompt: str, messages: list, profile_id: str, retr
     loop = asyncio.get_event_loop()
     retries = 0
     model        = "claude-haiku-4-5-20251001" if background else "claude-sonnet-4-6"
-    max_iters    = 3 if background else 20
+    max_iters    = 8 if background else 20
     iters        = 0
     cached_system = [{"type": "text", "text": prompt, "cache_control": {"type": "ephemeral"}}]
 

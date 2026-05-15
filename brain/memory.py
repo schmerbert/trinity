@@ -160,3 +160,20 @@ def remove_from_shelf(profile_id, topic):
     shelf = get_shelf(profile_id)
     shelf = [s for s in shelf if s.get("topic", "").lower() != topic.lower()]
     return update_profile(profile_id, {"shelf": shelf})
+
+# ─── Queued thoughts — things Trinity wants to surface when user is around ────
+#
+# alter table profiles add column if not exists queued_thoughts jsonb default '[]';
+#
+def get_queued_thoughts(profile_id):
+    profile = get_profile()
+    return profile.get("queued_thoughts") or []
+
+def queue_thought(profile_id, thought, context=""):
+    from datetime import datetime
+    queue = get_queued_thoughts(profile_id)
+    queue.append({"thought": thought, "context": context, "at": datetime.utcnow().isoformat()})
+    return update_profile(profile_id, {"queued_thoughts": queue})
+
+def clear_queued_thoughts(profile_id):
+    return update_profile(profile_id, {"queued_thoughts": []})

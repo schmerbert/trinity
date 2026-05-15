@@ -32,7 +32,7 @@ from brain.memory import (
     get_profile, create_profile, update_profile,
     add_interest, add_feedback, save_conversation_summary,
     get_recent_summaries, get_unseen_alerts, mark_alerts_seen,
-    process_feedback
+    process_feedback, get_queued_thoughts, clear_queued_thoughts
 )
 
 # --- Colors ---
@@ -420,17 +420,24 @@ class TrinityWidget(QMainWindow):
             summaries = get_recent_summaries(self.profile["id"])
             self.summary_text = json.dumps(summaries, indent=2) if summaries else "No previous conversations yet."
 
-            unseen = get_unseen_alerts(self.profile["id"])
+            unseen  = get_unseen_alerts(self.profile["id"])
+            queued  = get_queued_thoughts(self.profile["id"])
             if unseen:
                 self._load_findings(unseen)
                 mark_alerts_seen(self.profile["id"])
 
             opening = "Hey Trinity"
             if unseen:
-                alert_text = "You have new findings since we last spoke:\n"
+                alert_text = "Findings since we last spoke:\n"
                 for a in unseen[:5]:
                     alert_text += f"- {a['headline']}\n"
-                opening += f"\n\n{alert_text}\nBrief me naturally."
+                opening += f"\n\n{alert_text}"
+            if queued:
+                thought_text = "\n".join(f"- {q['thought']}" for q in queued[:3])
+                opening += f"\n\nYou had something you wanted to mention:\n{thought_text}"
+                clear_queued_thoughts(self.profile["id"])
+            if unseen or queued:
+                opening += "\n\nBrief me naturally."
 
             self._last_input = opening
             self._ask_trinity(opening)
@@ -447,19 +454,18 @@ class TrinityWidget(QMainWindow):
         self.findings_area.setHtml(html)
 
     def _check_new_alerts(self):
-        if not self.profile or self._tts_active:
+        if not self.profile:
             return
         alerts = get_unseen_alerts(self.profile["id"])
-        if not alerts:
+        queued = get_queued_thoughts(self.profile["id"])
+        if not alerts and not queued:
             return
         self._load_findings(alerts)
-        mark_alerts_seen(self.profile["id"])
-        self.wave.set_state("alert")
-        alert_text = "New findings:\n" + "\n".join(f"- {a['headline']}" for a in alerts[:5])
-        self._ask_trinity(f"{alert_text}\n\nBrief me naturally.")
+        count = len(alerts) + len(queued)
+        self._notify(f"Trinity has {count} thing{'s' if count > 1 else ''} for you.")
 
     def _check_urgent_alerts(self):
-        if not self.profile or self._tts_active:
+        if not self.profile:
             return
         alerts = get_unseen_alerts(self.profile["id"], min_score=2.5)
         if not alerts:
@@ -467,8 +473,14 @@ class TrinityWidget(QMainWindow):
         self._load_findings(alerts)
         mark_alerts_seen(self.profile["id"])
         self.wave.set_state("urgent")
-        alert_text = "\n".join(f"- {a['headline']}" for a in alerts[:3])
-        self._ask_trinity(f"You flagged this as urgent:\n{alert_text}\n\nTell me now.")
+        self._notify("Trinity — urgent.", urgent=True)
+        if not self._tts_active:
+            alert_text = "\n".join(f"- {a['headline']}" for a in alerts[:3])
+            self._ask_trinity(f"You flagged this as urgent:\n{alert_text}\n\nTell me now.")
+
+    def _notify(self, message, urgent=False):
+        icon = QSystemTrayIcon.MessageIcon.Critical if urgent else QSystemTrayIcon.MessageIcon.Information
+        self.tray.showMessage("Trinity", message, icon, 8000)
 
     # --- Trinity query ---
     def _ask_trinity(self, user_text):
