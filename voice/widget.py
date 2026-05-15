@@ -202,10 +202,15 @@ class TrinityWidget(QMainWindow):
         self._tts_poll.timeout.connect(self._update_stop_btn)
         self._tts_poll.start()
 
-        # Polls Supabase for new alerts from Eyes/Discord — wakes widget when found
+        # Normal alert queue — checks every 60s
         self._alert_poll = QTimer()
         self._alert_poll.setInterval(60_000)
         self._alert_poll.timeout.connect(self._check_new_alerts)
+
+        # Trinity's back door — checks every 5s for high-urgency alerts only
+        self._urgent_poll = QTimer()
+        self._urgent_poll.setInterval(5_000)
+        self._urgent_poll.timeout.connect(self._check_urgent_alerts)
 
         self._init_trinity()
 
@@ -430,6 +435,7 @@ class TrinityWidget(QMainWindow):
             self._last_input = opening
             self._ask_trinity(opening)
             self._alert_poll.start()
+            self._urgent_poll.start()
 
     def _load_findings(self, alerts):
         html = ""
@@ -451,6 +457,18 @@ class TrinityWidget(QMainWindow):
         self.wave.set_state("alert")
         alert_text = "New findings:\n" + "\n".join(f"- {a['headline']}" for a in alerts[:5])
         self._ask_trinity(f"{alert_text}\n\nBrief me naturally.")
+
+    def _check_urgent_alerts(self):
+        if not self.profile or self._tts_active:
+            return
+        alerts = get_unseen_alerts(self.profile["id"], min_score=2.5)
+        if not alerts:
+            return
+        self._load_findings(alerts)
+        mark_alerts_seen(self.profile["id"])
+        self.wave.set_state("urgent")
+        alert_text = "\n".join(f"- {a['headline']}" for a in alerts[:3])
+        self._ask_trinity(f"You flagged this as urgent:\n{alert_text}\n\nTell me now.")
 
     # --- Trinity query ---
     def _ask_trinity(self, user_text):

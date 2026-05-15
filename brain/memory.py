@@ -103,12 +103,12 @@ def save_alert(alert):
         print(f"[Brain] Save alert error: {e}")
         return None
 
-def get_unseen_alerts(profile_id, limit=10):
+def get_unseen_alerts(profile_id, limit=10, min_score=1.5):
     result = supabase.table("alerts")\
         .select("*")\
         .eq("profile_id", profile_id)\
         .eq("seen", False)\
-        .gte("relevance_score", 1.5)\
+        .gte("relevance_score", min_score)\
         .order("relevance_score", desc=True)\
         .limit(limit)\
         .execute()
