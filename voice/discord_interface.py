@@ -558,7 +558,7 @@ This time is yours. Act on your own judgment."""
         return
 
     try:
-        await _call_trinity(prompt, [{"role": "user", "content": context}], profile["id"])
+        await _call_trinity(prompt, [{"role": "user", "content": context}], profile["id"], retry=False)
         print(f"[Discord] Autonomous check-in complete ({now})")
     except Exception as e:
         print(f"[Discord] Autonomous loop error: {e}")
@@ -569,12 +569,12 @@ async def before_autonomous():
 
 # ─── Agentic response loop ────────────────────────────────────────────────────
 
-async def _call_trinity(prompt: str, messages: list, profile_id: str) -> str:
+async def _call_trinity(prompt: str, messages: list, profile_id: str, retry: bool = True) -> str:
     async with _api_lock:
-        return await _call_trinity_inner(prompt, messages, profile_id)
+        return await _call_trinity_inner(prompt, messages, profile_id, retry=retry)
 
 
-async def _call_trinity_inner(prompt: str, messages: list, profile_id: str) -> str:
+async def _call_trinity_inner(prompt: str, messages: list, profile_id: str, retry: bool = True) -> str:
     loop = asyncio.get_event_loop()
     retries = 0
 
@@ -593,6 +593,9 @@ async def _call_trinity_inner(prompt: str, messages: list, profile_id: str) -> s
             retries = 0
         except Exception as e:
             if "rate_limit" in str(e).lower() or "429" in str(e):
+                if not retry:
+                    print(f"[Discord] Rate limited — skipping background call")
+                    return ""
                 wait = min(60 * (2 ** retries), 300)
                 print(f"[Discord] Rate limited — retrying in {wait}s")
                 await asyncio.sleep(wait)
