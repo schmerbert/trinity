@@ -125,6 +125,17 @@ DISCORD_TOOLS = [
         "name": "get_watched_channels",
         "description": "See which channels Trinity is currently monitoring.",
         "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
+        "name": "set_home_server",
+        "description": "Designate a Discord server as Trinity's home — her memory palace. Stored permanently in her profile.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "guild_id": {"type": "string", "description": "The server ID to set as home"}
+            },
+            "required": ["guild_id"]
+        }
     }
 ]
 
@@ -309,6 +320,19 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
                 .eq("watching", True)\
                 .execute()
             return result.data or []
+        except Exception as e:
+            return {"error": str(e)}
+
+    elif name == "set_home_server":
+        guild = bot.get_guild(int(inputs["guild_id"]))
+        if not guild:
+            return {"error": "Server not found"}
+        try:
+            supabase.table("profiles").update({
+                "discord_home_guild_id":   str(guild.id),
+                "discord_home_guild_name": guild.name
+            }).eq("id", profile_id).execute()
+            return {"status": "home set", "server": guild.name}
         except Exception as e:
             return {"error": str(e)}
 
