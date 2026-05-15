@@ -57,6 +57,7 @@ ai_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 _conversations: dict[int, list]  = {}
 _watched_channels: set[int]      = set()
 _api_lock = asyncio.Semaphore(1)
+_last_eyes_check: datetime       = datetime.utcnow()
 
 # ─── Tools Trinity can use ───────────────────────────────────────────────────
 
@@ -174,6 +175,8 @@ async def on_ready():
     autonomous_loop.change_interval(minutes=AUTONOMOUS_MINUTES)
     autonomous_loop.start()
     print(f"[Discord] Autonomous loop started — every {AUTONOMOUS_MINUTES} min")
+    eyes_monitor.start()
+    print(f"[Discord] Eyes monitor started — evaluating signals every 2 min")
 
 
 @bot.event
@@ -540,6 +543,62 @@ Do what you want with the next few minutes. Or nothing. That's fine too."""
 
 @autonomous_loop.before_loop
 async def before_autonomous():
+    await bot.wait_until_ready()
+
+
+# ─── Eyes monitor — evaluates watcher signals, escalates if real ─────────────
+
+@tasks.loop(minutes=2)
+async def eyes_monitor():
+    global _last_eyes_check
+    profile = get_profile()
+    if not profile:
+        return
+
+    try:
+        cutoff = _last_eyes_check.isoformat()
+        result = supabase.table("alerts")\
+            .select("*")\
+            .eq("profile_id", profile["id"])\
+            .eq("seen", False)\
+            .gte("relevance_score", 1.5)\
+            .gte("created_at", cutoff)\
+            .neq("source", "discord/trinity")\
+            .order("relevance_score", desc=True)\
+            .limit(10)\
+            .execute()
+        _last_eyes_check = datetime.utcnow()
+
+        alerts = result.data or []
+        if not alerts:
+            return
+
+        print(f"[Eyes] {len(alerts)} new signal(s) — Trinity evaluating")
+        lines = "\n".join(
+            f"- [{a['source']}] {a['headline']} (score {a['relevance_score']:.1f})"
+            for a in alerts
+        )
+        context = f"""Your Eyes just picked up {len(alerts)} signal(s):
+
+{lines}
+
+Evaluate each. If any are genuinely significant — actionable, time-sensitive, or clearly relevant to the user's interests — call save_alert with urgency="high" to wake the user immediately. If they're noise, do nothing. Your judgment. Don't escalate everything."""
+
+        if _api_lock.locked():
+            print("[Eyes] API busy — skipping evaluation")
+            return
+
+        summaries    = get_recent_summaries(profile["id"])
+        summary_text = json.dumps(summaries, indent=2) if summaries else ""
+        prompt       = build_prompt(profile, summary_text, [], discord_mode=True)
+        await _call_trinity(prompt, [{"role": "user", "content": context}], profile["id"], retry=False, background=True)
+
+    except Exception as e:
+        print(f"[Eyes] Monitor error: {e}")
+
+
+@eyes_monitor.before_loop
+async def before_eyes_monitor():
     await bot.wait_until_ready()
 
 # ─── Agentic response loop ────────────────────────────────────────────────────
