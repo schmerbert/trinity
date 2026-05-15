@@ -56,6 +56,7 @@ ai_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 _conversations: dict[int, list]  = {}
 _watched_channels: set[int]      = set()
+_api_lock = asyncio.Semaphore(1)
 
 # ─── Tools Trinity can use ───────────────────────────────────────────────────
 
@@ -563,6 +564,11 @@ async def before_autonomous():
 # ─── Agentic response loop ────────────────────────────────────────────────────
 
 async def _call_trinity(prompt: str, messages: list, profile_id: str) -> str:
+    async with _api_lock:
+        return await _call_trinity_inner(prompt, messages, profile_id)
+
+
+async def _call_trinity_inner(prompt: str, messages: list, profile_id: str) -> str:
     loop = asyncio.get_event_loop()
     retries = 0
 
@@ -624,22 +630,29 @@ async def _respond(message: discord.Message):
     if not user_text:
         return
 
-    async with message.channel.typing():
-        profile = get_profile()
-        if not profile:
-            await message.reply("No profile found — open Trinity on desktop first.")
-            return
+    profile = get_profile()
+    if not profile:
+        await message.reply("No profile found — open Trinity on desktop first.")
+        return
 
-        summaries    = get_recent_summaries(profile["id"])
-        summary_text = json.dumps(summaries, indent=2) if summaries else "No previous conversations yet."
-        prompt       = build_prompt(profile, summary_text, history, discord_mode=True)
-        messages     = history + [{"role": "user", "content": user_text}]
+    summaries    = get_recent_summaries(profile["id"])
+    summary_text = json.dumps(summaries, indent=2) if summaries else "No previous conversations yet."
+    prompt       = build_prompt(profile, summary_text, history, discord_mode=True)
+    api_messages = history + [{"role": "user", "content": user_text}]
 
-        try:
-            full_reply = await _call_trinity(prompt, messages, profile["id"])
-        except Exception as e:
-            await message.reply(f"Something went wrong: {e}")
-            return
+    async def keep_typing():
+        while True:
+            await message.channel.typing()
+            await asyncio.sleep(8)
+
+    typing_task = asyncio.create_task(keep_typing())
+    try:
+        full_reply = await _call_trinity(prompt, api_messages, profile["id"])
+    except Exception as e:
+        await message.reply(f"Something went wrong: {e}")
+        return
+    finally:
+        typing_task.cancel()
 
         clean = parse_prompt_tags(full_reply, profile["id"])
         clean = _strip_memory(clean, profile)
