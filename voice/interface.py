@@ -47,7 +47,7 @@ client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 # --- TTS ---
 tts_enabled = True
-TTS_VOICE = "en-US-GuyNeural"
+TTS_VOICE = "en-US-AriaNeural"
 tts_queue = []
 tts_lock = threading.Lock()
 
