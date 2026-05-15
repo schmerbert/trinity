@@ -11,3 +11,4 @@ pycoingecko
 rich
 pyttsx3
 edge-tts
+PyQt6
