@@ -437,6 +437,7 @@ class TrinityWidget(QMainWindow):
                     alert_text += f"- {a['headline']}\n"
                 opening += f"\n\n{alert_text}\nBrief me naturally."
 
+            self._last_input = opening
             self._ask_trinity(opening)
 
     def _load_findings(self, alerts):
