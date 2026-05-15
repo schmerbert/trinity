@@ -325,7 +325,6 @@ class TrinityWidget(QMainWindow):
         self.findings_area.setReadOnly(True)
         self.findings_area.setMaximumHeight(120)
         self.findings_area.setFont(QFont("Courier New", 8))
-        self.findings_area.setOpenExternalLinks(True)
         self.findings_area.setStyleSheet("""
             QTextEdit {
                 background: rgba(10,20,35,180);
