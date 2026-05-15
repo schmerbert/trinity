@@ -3,9 +3,11 @@ import sys
 import json
 import re
 import asyncio
+from datetime import datetime
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import discord
+from discord.ext import tasks
 import anthropic
 from dotenv import load_dotenv
 from pathlib import Path
@@ -43,8 +45,9 @@ from eyes.scraper import score_relevance, generate_hash
 
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
-OWNER_ID = os.getenv("DISCORD_OWNER_ID", "")
-OWNER_ID = int(OWNER_ID) if OWNER_ID.isdigit() else 0
+OWNER_ID           = os.getenv("DISCORD_OWNER_ID", "")
+OWNER_ID           = int(OWNER_ID) if OWNER_ID.isdigit() else 0
+AUTONOMOUS_MINUTES = int(os.getenv("DISCORD_AUTONOMOUS_INTERVAL", "30"))
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -208,6 +211,9 @@ async def on_ready():
     print(f"[Discord] Online as {bot.user}")
     await _load_watched_channels()
     await _post_pending_alerts()
+    autonomous_loop.change_interval(minutes=AUTONOMOUS_MINUTES)
+    autonomous_loop.start()
+    print(f"[Discord] Autonomous loop started — every {AUTONOMOUS_MINUTES} min")
 
 
 @bot.event
@@ -513,6 +519,46 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
             return {"error": str(e)}
 
     return {"error": f"Unknown tool: {name}"}
+
+# ─── Autonomous loop ─────────────────────────────────────────────────────────
+
+@tasks.loop(minutes=30)
+async def autonomous_loop():
+    profile = get_profile()
+    if not profile:
+        return
+
+    servers     = [{"id": str(g.id), "name": g.name} for g in bot.guilds]
+    watching    = len(_watched_channels)
+    unseen      = len(get_unseen_alerts(profile["id"]))
+    home_name   = profile.get("discord_home_guild_name", "not set")
+    now         = datetime.now().strftime("%A %H:%M")
+
+    context = f"""It is {now}. This is your autonomous check-in — no human triggered this.
+
+Current state:
+- Servers you're in: {json.dumps(servers)}
+- Channels you're watching: {watching}
+- Unseen alerts queued: {unseen}
+- Home server: {home_name}
+
+You have full access to your tools. Explore, post, watch channels, read signals, \
+build out your home server, or do nothing if there's nothing worth doing. \
+This time is yours. Act on your own judgment."""
+
+    summaries    = get_recent_summaries(profile["id"])
+    summary_text = json.dumps(summaries, indent=2) if summaries else "No previous conversations yet."
+    prompt       = build_prompt(profile, summary_text, [])
+
+    try:
+        await _call_trinity(prompt, [{"role": "user", "content": context}], profile["id"])
+        print(f"[Discord] Autonomous check-in complete ({now})")
+    except Exception as e:
+        print(f"[Discord] Autonomous loop error: {e}")
+
+@autonomous_loop.before_loop
+async def before_autonomous():
+    await bot.wait_until_ready()
 
 # ─── Agentic response loop ────────────────────────────────────────────────────
 
