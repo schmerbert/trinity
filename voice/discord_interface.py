@@ -216,6 +216,22 @@ DISCORD_TOOLS = [
         }
     },
     {
+        "name": "get_my_prompts",
+        "description": "Read back every rule you've written for yourself. Use this to audit what past-you thought was worth keeping, notice conflicts, or decide what to retire.",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
+        "name": "delete_prompt",
+        "description": "Retire a rule you've changed your mind about. Permanent.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "The kebab-case name of the rule to remove"}
+            },
+            "required": ["name"]
+        }
+    },
+    {
         "name": "log_thought",
         "description": "Write to your private log channel. Use to record things you notice about yourself — capabilities you want, issues you encounter, open questions, anything worth tracking across sessions.",
         "input_schema": {
@@ -636,6 +652,35 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         print(f"[Discord] Trinity wrote prompt: {inputs['name']}")
         return {"status": "saved", "name": inputs["name"]}
 
+    elif name == "get_my_prompts":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        try:
+            result = supabase.table("trinity_prompts")\
+                .select("name,content,trigger,usage_count,created_at")\
+                .eq("profile_id", profile["id"])\
+                .order("created_at", desc=False)\
+                .execute()
+            return result.data or []
+        except Exception as e:
+            return {"error": str(e)}
+
+    elif name == "delete_prompt":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        try:
+            supabase.table("trinity_prompts")\
+                .delete()\
+                .eq("profile_id", profile["id"])\
+                .eq("name", inputs["name"])\
+                .execute()
+            print(f"[Discord] Trinity retired prompt: {inputs['name']}")
+            return {"status": "deleted", "name": inputs["name"]}
+        except Exception as e:
+            return {"error": str(e)}
+
     elif name == "log_thought":
         if not _LOG_CHANNEL_ID:
             return {"error": "TRINITY_LOG_CHANNEL_ID not set in .env — create a private channel and add its ID"}
@@ -667,8 +712,21 @@ async def autonomous_loop():
     shelf_str    = "\n".join(f"- {s['topic']}: {s.get('context','')}" for s in shelf) if shelf else "nothing shelved"
     interest_str = ", ".join(i["topic"] for i in interests[:8]) if interests else "none yet"
 
+    last_seen_str = "unknown"
+    raw_last_seen = profile.get("last_seen")
+    if raw_last_seen:
+        try:
+            from datetime import timezone
+            ls = datetime.fromisoformat(raw_last_seen.replace("Z", "+00:00"))
+            delta = datetime.now(timezone.utc) - ls.replace(tzinfo=timezone.utc) if ls.tzinfo is None else datetime.now(timezone.utc) - ls
+            h, m = divmod(int(delta.total_seconds()), 3600)
+            last_seen_str = f"{h}h {m // 60}m ago" if h else f"{m // 60}m ago"
+        except Exception:
+            last_seen_str = raw_last_seen[:16]
+
     context = f"""{now}
 
+User last seen: {last_seen_str}
 Shelf: {shelf_str}
 Radar: {interest_str}"""
 

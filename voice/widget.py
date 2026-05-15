@@ -39,7 +39,7 @@ from brain.memory import (
     add_interest, add_feedback, save_conversation_summary,
     get_recent_summaries, get_unseen_alerts, mark_alerts_seen,
     process_feedback, get_queued_thoughts, clear_queued_thoughts,
-    push_discord_write
+    push_discord_write, update_last_seen
 )
 
 # --- Colors ---
@@ -455,6 +455,7 @@ class TrinityWidget(QMainWindow):
             if unseen or queued:
                 opening += "\n\nBrief me naturally."
 
+            update_last_seen(self.profile["id"])
             self._last_input = opening
             self._ask_trinity(opening)
             self._alert_poll.start()

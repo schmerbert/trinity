@@ -182,6 +182,11 @@ def clear_queued_thoughts(profile_id):
 #
 # alter table profiles add column if not exists pending_discord_writes jsonb default '[]';
 #
+# alter table profiles add column if not exists last_seen timestamp;
+def update_last_seen(profile_id):
+    from datetime import datetime
+    return update_profile(profile_id, {"last_seen": datetime.utcnow().isoformat()})
+
 def push_discord_write(profile_id, content):
     from datetime import datetime
     profile = get_profile()
