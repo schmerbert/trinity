@@ -45,6 +45,16 @@ COLOR_DIM        = QColor(100, 140, 180)
 COLOR_INPUT_BG   = QColor(15, 25, 40, 200)
 COLOR_BORDER     = QColor(40, 100, 180, 120)
 
+IDLE_COLLAPSE_MS = 90_000
+
+_MD_STRIP = re.compile(r'\*{1,2}|_{1,2}|`+|#{1,6}\s*|>\s*|^\s*[-•]\s*', re.MULTILINE)
+
+def _strip_for_tts(text):
+    text = re.sub(r'http\S+', '', text)
+    text = _MD_STRIP.sub('', text)
+    return re.sub(r'\s+', ' ', text).strip()
+
+
 TRINITY_PROMPT = """You are Trinity, a personal financial intelligence assistant.
 You monitor markets, news, and signals relevant to the user and brief them when something matters.
 You are not a financial advisor. You never tell the user what to do — you surface information and ask what they think.
@@ -141,7 +151,6 @@ class WaveWidget(QWidget):
         mid = h / 2
         steps = w * 2
 
-        # Glow pass
         glow = QColor(self.wave_color)
         glow.setAlpha(35)
         pen_glow = QPen(glow)
@@ -150,7 +159,6 @@ class WaveWidget(QWidget):
         path = self._make_path(w, mid, steps)
         painter.drawPath(path)
 
-        # Main wave
         pen = QPen(self.wave_color)
         pen.setWidth(2)
         painter.setPen(pen)
@@ -220,10 +228,25 @@ class TrinityWidget(QMainWindow):
         self.tts_enabled   = True
         self.sidebar_open  = False
         self.current_reply = ""
+        self._tts_active   = False
+        self._tts_stop     = False
 
         self._setup_window()
         self._setup_ui()
         self._setup_tray()
+
+        # Idle collapse timer — hides response area after inactivity
+        self._idle_timer = QTimer()
+        self._idle_timer.setSingleShot(True)
+        self._idle_timer.setInterval(IDLE_COLLAPSE_MS)
+        self._idle_timer.timeout.connect(self._collapse)
+
+        # Polls _tts_active to update stop button styling
+        self._tts_poll = QTimer()
+        self._tts_poll.setInterval(200)
+        self._tts_poll.timeout.connect(self._update_stop_btn)
+        self._tts_poll.start()
+
         self._init_trinity()
 
     # --- Window setup ---
@@ -268,6 +291,12 @@ class TrinityWidget(QMainWindow):
         self.voice_btn.setToolTip("Toggle voice")
         self.voice_btn.clicked.connect(self._toggle_voice)
 
+        self.stop_btn = QPushButton("■")
+        self.stop_btn.setFixedSize(20, 20)
+        self.stop_btn.setStyleSheet(btn_style)
+        self.stop_btn.setToolTip("Stop voice")
+        self.stop_btn.clicked.connect(self._stop_tts)
+
         self.sidebar_btn = QPushButton("≡")
         self.sidebar_btn.setFixedSize(20, 20)
         self.sidebar_btn.setStyleSheet(btn_style)
@@ -282,6 +311,7 @@ class TrinityWidget(QMainWindow):
         header.addWidget(title)
         header.addWidget(self.status_label)
         header.addStretch()
+        header.addWidget(self.stop_btn)
         header.addWidget(self.voice_btn)
         header.addWidget(self.sidebar_btn)
         header.addWidget(close_btn)
@@ -480,8 +510,12 @@ class TrinityWidget(QMainWindow):
         self.input_field.setEnabled(True)
         self.input_field.setFocus()
 
+        self._idle_timer.start()
+
         if self.tts_enabled:
-            spoken = re.sub(r'http\S+', '', clean).strip()
+            self._tts_stop = False
+            self._tts_active = True
+            spoken = _strip_for_tts(clean)
             threading.Thread(target=self._speak, args=(spoken,), daemon=True).start()
 
     def _on_error(self, msg):
@@ -492,7 +526,14 @@ class TrinityWidget(QMainWindow):
 
     def _display(self, text):
         self.response_area.setPlainText(text)
-        self.adjustSize()
+        self._expand()
+
+    def _display_user(self, text):
+        self.response_area.setHtml(
+            f'<span style="color: rgb(70,110,160); font-family: Courier New; font-size: 9pt;">'
+            f'you &rsaquo; {text}</span>'
+        )
+        self._expand()
 
     # --- Memory parsing ---
     def _parse_memory(self, reply):
@@ -530,6 +571,10 @@ class TrinityWidget(QMainWindow):
             import subprocess
             import edge_tts
 
+            if self._tts_stop:
+                self._tts_active = False
+                return
+
             async def _gen():
                 with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
                     tmp = f.name
@@ -539,21 +584,64 @@ class TrinityWidget(QMainWindow):
 
             tmp_path = asyncio.run(_gen())
 
-            if sys.platform == "win32":
-                import winsound
-                wav = tmp_path.replace(".mp3", ".wav")
-                try:
-                    subprocess.run(["ffmpeg", "-y", "-i", tmp_path, wav], capture_output=True, timeout=10)
-                    winsound.PlaySound(wav, winsound.SND_FILENAME)
-                    os.unlink(wav)
-                except Exception:
-                    subprocess.run(
-                        ["powershell", "-c", f"(New-Object Media.SoundPlayer '{tmp_path}').PlaySync()"],
-                        capture_output=True, timeout=30
-                    )
-            os.unlink(tmp_path)
-        except Exception as e:
+            if not self._tts_stop:
+                if sys.platform == "win32":
+                    import winsound
+                    wav = tmp_path.replace(".mp3", ".wav")
+                    try:
+                        subprocess.run(["ffmpeg", "-y", "-i", tmp_path, wav], capture_output=True, timeout=10)
+                        if not self._tts_stop:
+                            winsound.PlaySound(wav, winsound.SND_FILENAME)
+                        os.unlink(wav)
+                    except Exception:
+                        if not self._tts_stop:
+                            subprocess.run(
+                                ["powershell", "-c", f"(New-Object Media.SoundPlayer '{tmp_path}').PlaySync()"],
+                                capture_output=True, timeout=30
+                            )
+                else:
+                    subprocess.run(["mpg123", "-q", tmp_path], capture_output=True)
+
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
+        except Exception:
             pass
+        finally:
+            self._tts_active = False
+
+    def _stop_tts(self):
+        self._tts_stop = True
+        if sys.platform == "win32":
+            try:
+                import winsound
+                winsound.PlaySound(None, winsound.SND_PURGE)
+            except Exception:
+                pass
+
+    def _update_stop_btn(self):
+        if self._tts_active:
+            self.stop_btn.setStyleSheet(
+                "QPushButton { background: transparent; color: rgb(80,180,255); border: none; font-size: 11px; }"
+                "QPushButton:hover { color: rgb(180,220,255); }"
+            )
+        else:
+            self.stop_btn.setStyleSheet(
+                "QPushButton { background: transparent; color: rgb(30,50,80); border: none; font-size: 11px; }"
+            )
+
+    # --- Collapse / expand ---
+    def _collapse(self):
+        self.response_area.setVisible(False)
+        self.adjustSize()
+
+    def _expand(self):
+        self._idle_timer.stop()
+        if not self.response_area.isVisible():
+            self.response_area.setVisible(True)
+            self.adjustSize()
 
     # --- Input ---
     def _send(self):
@@ -566,16 +654,20 @@ class TrinityWidget(QMainWindow):
             self.profile = create_profile(text)
             self._awaiting_name = False
             self.input_field.setPlaceholderText("say something...")
-            opening = f"Good to meet you. I'm Trinity — here to watch markets, surface signals, and help you think through what matters. What are you currently tracking?"
+            opening = "Good to meet you. I'm Trinity — here to watch markets, surface signals, and help you think through what matters. What are you currently tracking?"
             self._display(opening)
             self.history = [
                 {"role": "user", "content": f"My name is {text}"},
                 {"role": "assistant", "content": opening}
             ]
             if self.tts_enabled:
+                self._tts_stop = False
+                self._tts_active = True
                 threading.Thread(target=self._speak, args=(opening,), daemon=True).start()
             return
 
+        self._expand()
+        self._display_user(text)
         self._last_input = text
         self._ask_trinity(text)
 
@@ -588,6 +680,8 @@ class TrinityWidget(QMainWindow):
     # --- Voice ---
     def _toggle_voice(self):
         self.tts_enabled = not self.tts_enabled
+        if not self.tts_enabled:
+            self._stop_tts()
         self.voice_btn.setStyleSheet(
             "QPushButton { background: transparent; color: rgb(80,180,255); border: none; font-size: 11px; }"
             if self.tts_enabled else
