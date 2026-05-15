@@ -134,7 +134,7 @@ def scrape_news(profile):
     return alerts
 
 
-ddef resolve_token(name):
+def resolve_token(name):
     try:
         url = f"https://api.dexscreener.com/latest/dex/search?q={name}"
         response = requests.get(url, headers=HEADERS, timeout=10)
