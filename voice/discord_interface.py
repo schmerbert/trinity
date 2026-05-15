@@ -558,7 +558,7 @@ This time is yours. Act on your own judgment."""
         return
 
     try:
-        await _call_trinity(prompt, [{"role": "user", "content": context}], profile["id"], retry=False)
+        await _call_trinity(prompt, [{"role": "user", "content": context}], profile["id"], retry=False, background=True)
         print(f"[Discord] Autonomous check-in complete ({now})")
     except Exception as e:
         print(f"[Discord] Autonomous loop error: {e}")
@@ -569,21 +569,22 @@ async def before_autonomous():
 
 # ─── Agentic response loop ────────────────────────────────────────────────────
 
-async def _call_trinity(prompt: str, messages: list, profile_id: str, retry: bool = True) -> str:
+async def _call_trinity(prompt: str, messages: list, profile_id: str, retry: bool = True, background: bool = False) -> str:
     async with _api_lock:
-        return await _call_trinity_inner(prompt, messages, profile_id, retry=retry)
+        return await _call_trinity_inner(prompt, messages, profile_id, retry=retry, background=background)
 
 
-async def _call_trinity_inner(prompt: str, messages: list, profile_id: str, retry: bool = True) -> str:
+async def _call_trinity_inner(prompt: str, messages: list, profile_id: str, retry: bool = True, background: bool = False) -> str:
     loop = asyncio.get_event_loop()
     retries = 0
+    model = "claude-haiku-4-5-20251001" if background else "claude-sonnet-4-6"
 
     while True:
         try:
             response = await loop.run_in_executor(
                 None,
-                lambda msgs=messages: ai_client.messages.create(
-                    model="claude-sonnet-4-6",
+                lambda msgs=messages, m=model: ai_client.messages.create(
+                    model=m,
                     max_tokens=1000,
                     system=prompt,
                     messages=msgs,
