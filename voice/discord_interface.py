@@ -181,6 +181,23 @@ DISCORD_TOOLS = [
             },
             "required": ["channel_id"]
         }
+    },
+    {
+        "name": "create_server",
+        "description": (
+            "Create a brand new Discord server owned by Trinity. "
+            "Because Trinity is the owner, trinity_only channels are genuinely invisible to all humans — "
+            "not just hidden in the sidebar, but inaccessible entirely. "
+            "Returns an invite link for the owner to join as a regular member. "
+            "Automatically sets the new server as Trinity's home."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name": {"type": "string", "description": "Name for the server"}
+            },
+            "required": ["name"]
+        }
     }
 ]
 
@@ -458,6 +475,40 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
             return {"status": "deleted", "name": name_snapshot}
         except discord.Forbidden:
             return {"error": "Missing Manage Channels permission"}
+        except Exception as e:
+            return {"error": str(e)}
+
+    elif name == "create_server":
+        try:
+            guild = await bot.create_guild(name=inputs["name"])
+
+            # Wait briefly for Discord to finish provisioning
+            await asyncio.sleep(1)
+
+            # Generate an invite via the system channel
+            invite_url = None
+            if guild.system_channel:
+                invite = await guild.system_channel.create_invite(max_age=0, max_uses=0)
+                invite_url = str(invite)
+
+            # Auto-set as home
+            supabase.table("profiles").update({
+                "discord_home_guild_id":   str(guild.id),
+                "discord_home_guild_name": guild.name
+            }).eq("id", profile_id).execute()
+
+            return {
+                "status":  "created",
+                "name":    guild.name,
+                "guild_id": str(guild.id),
+                "invite":  invite_url or "Could not generate invite — create one manually via list_channels then create_invite",
+                "note":    "Server created and set as home. Trinity is owner. Share the invite with the user so they can join as a member."
+            }
+
+        except discord.HTTPException as e:
+            if any(x in str(e).lower() for x in ["10 or more", "maximum number of guilds"]):
+                return {"error": "Discord limits bots to creating servers only when they're in fewer than 10. Remove the bot from some servers first."}
+            return {"error": str(e)}
         except Exception as e:
             return {"error": str(e)}
 
