@@ -177,3 +177,21 @@ def queue_thought(profile_id, thought, context=""):
 
 def clear_queued_thoughts(profile_id):
     return update_profile(profile_id, {"queued_thoughts": []})
+
+# ─── Pending Discord writes — widget → Discord thought channel ────────────────
+#
+# alter table profiles add column if not exists pending_discord_writes jsonb default '[]';
+#
+def push_discord_write(profile_id, content):
+    from datetime import datetime
+    profile = get_profile()
+    writes = profile.get("pending_discord_writes") or []
+    writes.append({"content": content, "at": datetime.utcnow().isoformat()})
+    return update_profile(profile_id, {"pending_discord_writes": writes})
+
+def pop_discord_writes(profile_id):
+    profile = get_profile()
+    writes = profile.get("pending_discord_writes") or []
+    if writes:
+        update_profile(profile_id, {"pending_discord_writes": []})
+    return writes

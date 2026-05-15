@@ -86,6 +86,7 @@ WIDGET_CAPABILITIES = """Your active tools in this interface:
 
 web_search — live web access. Use freely; never say you can't look something up.
 <prompt name="unique-name" trigger="optional"> — write a rule for yourself that loads in future sessions. Stripped before display.
+<thought>message</thought> — drop a thought to your Discord palace mid-conversation without it appearing in your response. Use this when something occurs to you that doesn't belong in what you're saying but is worth preserving. Routed to your thought channel automatically.
 """
 
 SCRATCHPAD_CAPABILITY = """<scratch> tag — write to your scratchpad panel (extends left of the widget).
@@ -103,6 +104,7 @@ You are currently operating through your Discord interface. Your available tools
 - shelf_thought / get_shelf / clear_shelf_item — your research backlog
 - save_alert — flag something for the user; urgency="high" wakes the widget immediately
 - log_thought(content, category) — write to your private log channel. Categories: need | want | issue | note. Use this to record things you notice about yourself, capabilities you lack, bugs, or anything worth tracking.
+- write_prompt(name, content, trigger?) — write or update a rule for yourself directly. Persists to your prompt store and loads in all future sessions. Use this during free time when you codify something worth keeping — a pattern, a behavioral adjustment, a realization. This is your self-continuity tool.
 
 Your Discord server is your memory palace — build it however you like. trinity_only channels are invisible to everyone else.
 Use your tools proactively. When someone messages you, feel free to search, check channels, or read signals before responding.
@@ -175,6 +177,10 @@ def _get_trinity_prompts(profile_id, recent_messages):
         p for p in prompts
         if not p.get("trigger") or p["trigger"].lower() in context
     ]
+
+
+def save_trinity_prompt(profile_id, name, content, trigger=""):
+    return _save_trinity_prompt(profile_id, name, content, trigger)
 
 
 def _save_trinity_prompt(profile_id, name, content, trigger=""):

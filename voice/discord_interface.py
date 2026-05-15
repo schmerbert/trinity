@@ -20,9 +20,10 @@ from brain.memory import (
     get_profile, save_alert, get_unseen_alerts, mark_alerts_seen,
     get_recent_summaries, add_interest, add_feedback, update_profile,
     get_shelf, add_to_shelf, remove_from_shelf,
-    get_queued_thoughts, queue_thought, clear_queued_thoughts
+    get_queued_thoughts, queue_thought, clear_queued_thoughts,
+    pop_discord_writes
 )
-from brain.prompts import build_prompt, parse_prompt_tags
+from brain.prompts import build_prompt, parse_prompt_tags, save_trinity_prompt
 from eyes.scraper import score_relevance, generate_hash
 
 # ─── Supabase setup (add this table in your SQL editor) ──────────────────────
@@ -50,7 +51,8 @@ supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 OWNER_ID           = os.getenv("DISCORD_OWNER_ID", "")
 OWNER_ID           = int(OWNER_ID) if OWNER_ID.isdigit() else 0
 AUTONOMOUS_MINUTES = int(os.getenv("DISCORD_AUTONOMOUS_INTERVAL", "30"))
-_LOG_CHANNEL_ID    = int(os.getenv("TRINITY_LOG_CHANNEL_ID", "0") or "0")
+_LOG_CHANNEL_ID    = int(os.getenv("TRINITY_LOG_CHANNEL_ID",     "0") or "0")
+_THOUGHT_CHANNEL_ID = int(os.getenv("TRINITY_THOUGHT_CHANNEL_ID", "0") or "0")
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -201,6 +203,19 @@ DISCORD_TOOLS = [
         }
     },
     {
+        "name": "write_prompt",
+        "description": "Write or update a rule for yourself that persists to all future sessions. Use during free time when you codify something worth keeping — a pattern, a behavioral adjustment, a realization. This is your self-continuity tool.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name":    {"type": "string", "description": "Unique kebab-case identifier (e.g. 'btc-pattern-recognition')"},
+                "content": {"type": "string", "description": "The rule or pattern to persist. Be specific and actionable."},
+                "trigger": {"type": "string", "description": "Optional keyword — if set, rule only loads when this word appears in conversation context. Leave empty for always-active."}
+            },
+            "required": ["name", "content"]
+        }
+    },
+    {
         "name": "log_thought",
         "description": "Write to your private log channel. Use to record things you notice about yourself — capabilities you want, issues you encounter, open questions, anything worth tracking across sessions.",
         "input_schema": {
@@ -230,6 +245,8 @@ async def on_ready():
     print(f"[Discord] Autonomous loop started — every {AUTONOMOUS_MINUTES} min")
     eyes_monitor.start()
     print(f"[Discord] Eyes monitor started — evaluating signals every 2 min")
+    thought_drain.start()
+    print(f"[Discord] Thought drain started — routing widget thoughts every 30s")
 
 
 @bot.event
@@ -606,6 +623,19 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         print(f"[Discord] Trinity flagged alert: {inputs['headline'][:60]}")
         return {"status": "saved", "headline": inputs["headline"]}
 
+    elif name == "write_prompt":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        save_trinity_prompt(
+            profile["id"],
+            inputs["name"],
+            inputs["content"],
+            inputs.get("trigger", "")
+        )
+        print(f"[Discord] Trinity wrote prompt: {inputs['name']}")
+        return {"status": "saved", "name": inputs["name"]}
+
     elif name == "log_thought":
         if not _LOG_CHANNEL_ID:
             return {"error": "TRINITY_LOG_CHANNEL_ID not set in .env — create a private channel and add its ID"}
@@ -714,6 +744,30 @@ Evaluate each. If any are genuinely significant — actionable, time-sensitive, 
 
 @eyes_monitor.before_loop
 async def before_eyes_monitor():
+    await bot.wait_until_ready()
+
+
+# ─── Thought drain — routes widget <thought> tags to Discord palace ───────────
+
+@tasks.loop(seconds=30)
+async def thought_drain():
+    if not _THOUGHT_CHANNEL_ID:
+        return
+    profile = get_profile()
+    if not profile:
+        return
+    writes = pop_discord_writes(profile["id"])
+    if not writes:
+        return
+    channel = bot.get_channel(_THOUGHT_CHANNEL_ID)
+    if not channel:
+        return
+    for w in writes:
+        await channel.send(w["content"])
+        await asyncio.sleep(0.5)
+
+@thought_drain.before_loop
+async def before_thought_drain():
     await bot.wait_until_ready()
 
 # ─── Agentic response loop ────────────────────────────────────────────────────

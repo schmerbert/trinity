@@ -38,7 +38,8 @@ from brain.memory import (
     get_profile, create_profile, update_profile,
     add_interest, add_feedback, save_conversation_summary,
     get_recent_summaries, get_unseen_alerts, mark_alerts_seen,
-    process_feedback, get_queued_thoughts, clear_queued_thoughts
+    process_feedback, get_queued_thoughts, clear_queued_thoughts,
+    push_discord_write
 )
 
 # --- Colors ---
@@ -196,6 +197,7 @@ class TrinityWidget(QMainWindow):
         self._setup_ui()
         self._setup_tray()
         self._scratchpad = ScratchpadPanel(self) if _SCRATCHPAD else None
+        self._init_log()
 
         # Idle collapse timer — hides response area after inactivity
         self._idle_timer = QTimer()
@@ -517,7 +519,7 @@ class TrinityWidget(QMainWindow):
         self._stream_buffer += text
         display = self._stream_buffer
         # Hide tag blocks from the live display
-        for tag in ("<memory>", "<prompt", "<scratch>"):
+        for tag in ("<memory>", "<prompt", "<scratch>", "<thought>"):
             if tag in display:
                 display = display.split(tag)[0]
         display = display.strip()
@@ -532,10 +534,12 @@ class TrinityWidget(QMainWindow):
         clean = self._parse_memory(clean)
         clean = re.sub(r'<memory>.*?</memory>', '', clean, flags=re.DOTALL).strip()
         clean = self._parse_scratch(clean)
+        clean = self._parse_thought(clean)
 
         self.history.append({"role": "user", "content": self._last_input})
         self.history.append({"role": "assistant", "content": clean})
 
+        self._log("trinity", clean)
         self._display(clean)
         self.wave.set_state("idle")
         self.status_label.setText("watching")
@@ -595,6 +599,28 @@ class TrinityWidget(QMainWindow):
             pass
         return clean
 
+    # --- Conversation log ---
+    def _init_log(self):
+        import datetime
+        log_dir = Path(__file__).parent.parent / "logs"
+        log_dir.mkdir(exist_ok=True)
+        self._log_path = log_dir / f"conversation_{datetime.date.today()}.txt"
+        with open(self._log_path, "a", encoding="utf-8") as f:
+            ts = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            f.write(f"\n{'═' * 50}\nSESSION: {ts}\n{'═' * 50}\n\n")
+
+    def _log(self, role, text):
+        if not hasattr(self, "_log_path") or not text:
+            return
+        import datetime
+        ts = datetime.datetime.now().strftime("%H:%M:%S")
+        label = "YOU" if role == "user" else "TRINITY"
+        try:
+            with open(self._log_path, "a", encoding="utf-8") as f:
+                f.write(f"[{ts}] {label}\n{text}\n\n")
+        except Exception:
+            pass
+
     # --- Scratchpad extension ---
     def _toggle_scratchpad(self):
         if self._scratchpad:
@@ -608,7 +634,25 @@ class TrinityWidget(QMainWindow):
         for i in range(1, len(parts), 2):
             content = parts[i].strip()
             if content:
+                # Separator so consecutive writes don't run together
+                if self._scratchpad._text.toPlainText():
+                    self._scratchpad.write_trinity("\n─\n")
                 self._scratchpad.write_trinity(content)
+        return clean
+
+    # --- Thought routing (widget → Discord palace) ---
+    def _parse_thought(self, reply):
+        if not self.profile or "<thought>" not in reply:
+            return reply
+        parts = re.split(r'<thought>(.*?)</thought>', reply, flags=re.DOTALL)
+        clean = parts[0].strip()
+        for i in range(1, len(parts), 2):
+            content = parts[i].strip()
+            if content:
+                try:
+                    push_discord_write(self.profile["id"], content)
+                except Exception:
+                    pass
         return clean
 
     # --- TTS ---
@@ -717,6 +761,7 @@ class TrinityWidget(QMainWindow):
         self._expand()
         self._display_user(text)
         self._last_input = text
+        self._log("user", text)
         self._ask_trinity(text)
 
     # --- Sidebar ---
