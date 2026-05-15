@@ -202,6 +202,11 @@ class TrinityWidget(QMainWindow):
         self._tts_poll.timeout.connect(self._update_stop_btn)
         self._tts_poll.start()
 
+        # Polls Supabase for new alerts from Eyes/Discord — wakes widget when found
+        self._alert_poll = QTimer()
+        self._alert_poll.setInterval(60_000)
+        self._alert_poll.timeout.connect(self._check_new_alerts)
+
         self._init_trinity()
 
     # --- Window setup ---
@@ -424,6 +429,7 @@ class TrinityWidget(QMainWindow):
 
             self._last_input = opening
             self._ask_trinity(opening)
+            self._alert_poll.start()
 
     def _load_findings(self, alerts):
         html = ""
@@ -433,6 +439,18 @@ class TrinityWidget(QMainWindow):
             html += f'<p style="color:{color}; margin:2px 0;"><b>{a["headline"][:60]}</b><br>'
             html += f'<a href="{a["url"]}" style="color:#4080c0;">Open</a></p>'
         self.findings_area.setHtml(html)
+
+    def _check_new_alerts(self):
+        if not self.profile or self._tts_active:
+            return
+        alerts = get_unseen_alerts(self.profile["id"])
+        if not alerts:
+            return
+        self._load_findings(alerts)
+        mark_alerts_seen(self.profile["id"])
+        self.wave.set_state("alert")
+        alert_text = "New findings:\n" + "\n".join(f"- {a['headline']}" for a in alerts[:5])
+        self._ask_trinity(f"{alert_text}\n\nBrief me naturally.")
 
     # --- Trinity query ---
     def _ask_trinity(self, user_text):

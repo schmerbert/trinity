@@ -146,6 +146,21 @@ DISCORD_TOOLS = [
         "name": "create_server",
         "description": "Create a Discord server owned by Trinity. Returns an invite link. Auto-sets as home.",
         "input_schema": {"type": "object", "properties": {"name": {"type": "string"}}, "required": ["name"]}
+    },
+    {
+        "name": "save_alert",
+        "description": "Flag something as worth surfacing to the user. Saved to the alert feed — the widget will wake up and brief them.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "headline": {"type": "string", "description": "One line summary"},
+                "summary":  {"type": "string", "description": "More detail"},
+                "topic":    {"type": "string"},
+                "url":      {"type": "string", "description": "Source URL if any"},
+                "urgency":  {"type": "string", "enum": ["normal", "high"], "default": "normal"}
+            },
+            "required": ["headline", "topic"]
+        }
     }
 ]
 
@@ -464,6 +479,26 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
             return {"error": str(e)}
         except Exception as e:
             return {"error": str(e)}
+
+    elif name == "save_alert":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile found"}
+        urgency = inputs.get("urgency", "normal")
+        alert = {
+            "profile_id":      profile["id"],
+            "source":          "discord/trinity",
+            "topic":           inputs["topic"],
+            "headline":        inputs["headline"],
+            "summary":         inputs.get("summary", inputs["headline"]),
+            "url":             inputs.get("url", ""),
+            "relevance_score": 2.5 if urgency == "high" else 1.6,
+            "seen":            False,
+        }
+        alert["content_hash"] = generate_hash(alert)
+        save_alert(alert)
+        print(f"[Discord] Trinity flagged alert: {inputs['headline'][:60]}")
+        return {"status": "saved", "headline": inputs["headline"]}
 
     return {"error": f"Unknown tool: {name}"}
 
