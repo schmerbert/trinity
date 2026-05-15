@@ -548,7 +548,7 @@ This time is yours. Act on your own judgment."""
 
     summaries    = get_recent_summaries(profile["id"])
     summary_text = json.dumps(summaries, indent=2) if summaries else "No previous conversations yet."
-    prompt       = build_prompt(profile, summary_text, [])
+    prompt       = build_prompt(profile, summary_text, [], discord_mode=True)
 
     try:
         await _call_trinity(prompt, [{"role": "user", "content": context}], profile["id"])
@@ -620,7 +620,7 @@ async def _respond(message: discord.Message):
 
         summaries    = get_recent_summaries(profile["id"])
         summary_text = json.dumps(summaries, indent=2) if summaries else "No previous conversations yet."
-        prompt       = build_prompt(profile, summary_text, history)
+        prompt       = build_prompt(profile, summary_text, history, discord_mode=True)
         messages     = history + [{"role": "user", "content": user_text}]
 
         try:

@@ -95,9 +95,23 @@ Only create a prompt when there is a genuine pattern. One at a time, sparingly. 
 """
 
 
-def build_prompt(profile, summary_text, recent_messages=None):
+DISCORD_CONTEXT = """
+You are currently operating through your Discord interface. You have a full suite of Discord tools available:
+- list_servers, list_channels, read_channel, send_message
+- watch_channel, unwatch_channel, get_watched_channels
+- set_home_server, create_server, create_category, create_channel, delete_channel
+- web_search (live web search)
+
+Your Discord server is your memory palace — build it however you like. You can create channels only you can see (trinity_only), channels for the owner (owner_only), or public ones. You own the server, so trinity_only channels are genuinely invisible to everyone else.
+Use your tools proactively. When someone messages you, feel free to search, check channels, or read signals before responding.
+"""
+
+
+def build_prompt(profile, summary_text, recent_messages=None, discord_mode=False):
     base = TRINITY_BASE.format(profile=profile, summaries=summary_text)
     parts = [base]
+    if discord_mode:
+        parts.append(DISCORD_CONTEXT)
 
     modules = _get_active_modules(recent_messages or [], profile)
     for m in modules:
