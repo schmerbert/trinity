@@ -1103,6 +1103,7 @@ class TrinityWidget(QMainWindow):
             return
         self._load_findings(alerts)
         mark_alerts_seen(self.profile["id"])
+        clear_queued_thoughts(self.profile["id"])
         self.wave.set_state("alert")
         QTimer.singleShot(6000, lambda: self.wave.set_state("idle"))
 
