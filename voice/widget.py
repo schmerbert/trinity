@@ -339,6 +339,18 @@ WIDGET_TOOLS = [
         "input_schema": {"type": "object", "properties": {}, "required": []}
     },
     {
+        "name": "note_for_claude",
+        "description": "Leave a note for Claude Code — bugs you've hit, things you want changed, questions about how you work, design feedback. Claude Code checks CLAUDE_NOTES.md at the start of sessions. Use this when something is worth a dev pass but you can't fix it yourself.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "message": {"type": "string", "description": "The note, bug report, question, or request"},
+                "tag":     {"type": "string", "description": "Category: bug | request | question | observation", "enum": ["bug", "request", "question", "observation"]}
+            },
+            "required": ["message", "tag"]
+        }
+    },
+    {
         "name": "read_file",
         "description": "Read any file within the Trinity project directory. Use to understand your own source code, inspect configs, or review logs. Paths are relative to the Trinity root (e.g. 'brain/prompts.py', 'voice/widget.py'). .env is blocked. Use offset and limit for large files.",
         "input_schema": {
@@ -563,6 +575,20 @@ class TrinityWorker(QThread):
             ts       = _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
             push_discord_write(profile["id"], f"{icon} **{category.upper()}** — {ts}\n{inputs['content']}")
             return {"status": "logged", "category": category}
+
+        elif name == "note_for_claude":
+            try:
+                import datetime as _dt
+                notes_path = Path(__file__).parent.parent / "CLAUDE_NOTES.md"
+                ts  = _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+                tag = inputs.get("tag", "observation").upper()
+                entry = f"## [{tag}] {ts}\n{inputs['message']}\n\n---\n\n"
+                with open(notes_path, "a", encoding="utf-8") as f:
+                    f.write(entry)
+                log.info(f"Note for Claude [{tag}]: {inputs['message'][:60]}")
+                return {"status": "noted"}
+            except Exception as e:
+                return {"error": str(e)}
 
         elif name == "get_changelog":
             try:

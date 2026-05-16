@@ -353,6 +353,18 @@ DISCORD_TOOLS = [
         "input_schema": {"type": "object", "properties": {}, "required": []}
     },
     {
+        "name": "note_for_claude",
+        "description": "Leave a note for Claude Code — bugs you've hit, things you want changed, questions about how you work, design feedback. Claude Code checks CLAUDE_NOTES.md at the start of sessions. Use this when something is worth a dev pass but you can't fix it yourself.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "message": {"type": "string", "description": "The note, bug report, question, or request"},
+                "tag":     {"type": "string", "description": "Category: bug | request | question | observation", "enum": ["bug", "request", "question", "observation"]}
+            },
+            "required": ["message", "tag"]
+        }
+    },
+    {
         "name": "send_image",
         "description": "Download an image from a URL and post it to a Discord channel as an attachment. Use channel_name to target a palace channel by name, or channel_id for any channel. Good for curating — grab something from the web and place it in the right palace channel.",
         "input_schema": {
@@ -386,7 +398,7 @@ _BACKGROUND_TOOL_NAMES = {
     "queue_for_user", "shelf_thought", "get_shelf", "clear_shelf_item",
     "save_alert", "read_my_channel", "log_wake", "get_scratchpad", "write_scratchpad",
     "schedule_wake", "write_prompt", "get_my_prompts", "delete_prompt", "log_thought",
-    "get_changelog", "read_file", "send_image"
+    "get_changelog", "read_file", "send_image", "note_for_claude"
 }
 DISCORD_TOOLS_BACKGROUND = [
     t for t in DISCORD_TOOLS if t.get("name") in _BACKGROUND_TOOL_NAMES
@@ -999,6 +1011,20 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
             return {"error": f"403 {e.text}"}
         log.info(f"Log [{category}]: {inputs['content'][:60]}")
         return {"status": "logged", "category": category}
+
+    elif name == "note_for_claude":
+        try:
+            from pathlib import Path as _Path
+            notes_path = _Path(__file__).parent.parent / "CLAUDE_NOTES.md"
+            ts  = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+            tag = inputs.get("tag", "observation").upper()
+            entry = f"## [{tag}] {ts}\n{inputs['message']}\n\n---\n\n"
+            with open(notes_path, "a", encoding="utf-8") as f:
+                f.write(entry)
+            log.info(f"Note for Claude [{tag}]: {inputs['message'][:60]}")
+            return {"status": "noted"}
+        except Exception as e:
+            return {"error": str(e)}
 
     elif name == "get_changelog":
         try:
