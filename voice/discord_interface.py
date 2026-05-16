@@ -661,8 +661,12 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         if not channel:
             return {"error": "Channel not found or no access"}
         content = inputs["content"]
-        for chunk in [content[i:i + 1900] for i in range(0, len(content), 1900)]:
-            await channel.send(chunk)
+        try:
+            for chunk in [content[i:i + 1900] for i in range(0, len(content), 1900)]:
+                await channel.send(chunk)
+        except discord.Forbidden as e:
+            log.error(f"send_message 403 on #{channel.name} (id={channel.id}): {e.text}")
+            return {"error": f"403 {e.text}"}
         return {"status": "sent", "channel": str(channel.name)}
 
     elif name == "watch_channel":
@@ -976,7 +980,11 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         icons    = {"need": "📋", "want": "✨", "issue": "⚠️", "note": "🔖"}
         icon     = icons.get(category, "🔖")
         ts       = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
-        await channel.send(f"{icon} **{category.upper()}** — {ts}\n{inputs['content']}")
+        try:
+            await channel.send(f"{icon} **{category.upper()}** — {ts}\n{inputs['content']}")
+        except discord.Forbidden as e:
+            log.error(f"log_thought 403 on #{channel.name} (id={_LOG_CHANNEL_ID}): {e.text}")
+            return {"error": f"403 {e.text}"}
         log.info(f"Log [{category}]: {inputs['content'][:60]}")
         return {"status": "logged", "category": category}
 
@@ -1195,7 +1203,14 @@ async def thought_drain():
     if not channel:
         return
     for w in writes:
-        await channel.send(w["content"])
+        try:
+            await channel.send(w["content"])
+        except discord.Forbidden as e:
+            log.error(f"thought_drain 403 on #{channel.name} (id={_THOUGHT_CHANNEL_ID}): {e.text}")
+            break
+        except Exception as e:
+            log.error(f"thought_drain send error: {e}")
+            break
         await asyncio.sleep(0.5)
 
 @thought_drain.before_loop
