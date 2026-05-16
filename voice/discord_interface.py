@@ -1147,7 +1147,7 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
             encoded    = urllib.parse.quote(prompt)
             image_url  = f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=1024&nologo=true&seed={hash(prompt) % 99999}"
             log.info(f"Generating image: {prompt[:60]}")
-            r = _req.get(image_url, timeout=60)
+            r = _req.get(image_url, timeout=120)
             if not r.ok:
                 return {"error": f"Pollinations error {r.status_code}"}
             channel_name = inputs.get("channel_name")

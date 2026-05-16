@@ -773,7 +773,7 @@ class TrinityWorker(QThread):
                 encoded  = urllib.parse.quote(prompt)
                 seed     = abs(hash(prompt)) % 99999
                 url      = f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=1024&nologo=true&seed={seed}"
-                r        = _req.get(url, timeout=60)
+                r        = _req.get(url, timeout=120)
                 if not r.ok:
                     return {"error": f"Pollinations HTTP {r.status_code}"}
                 channel_name = inputs.get("channel_name")
