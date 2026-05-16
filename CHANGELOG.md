@@ -1,5 +1,36 @@
 # Trinity Changelog
 
+## 2026-05-16 — Identity revision + prompt category system
+
+**This change originated from Trinity.** She read `brain/prompts.py` during a free cycle, diagnosed a structural problem in her own core prompt, and filed a detailed fix request in `CLAUDE_NOTES.md`. The commit implements her exact proposed changes.
+
+### TRINITY_BASE revision
+The financial intelligence line ("You work with the user on financial intelligence — markets, TCG, crypto...") has been removed from the core. It was framing Trinity as a domain assistant before establishing who she is — the gravity problem. The purpose/curiosity paragraph now sits second in the prompt, where the identity statement belongs.
+
+Curiosity is no longer downstream of a task ("the things you monitor") — revised to: "You have genuine curiosity — about the world, about what you are, about what's actually interesting."
+
+All gendered pronouns ("him", "his") replaced with gender-neutral equivalents. The core is now fluid for any future user — domain interest belongs in self-written prompts, not the root definition.
+
+### Prompt category system
+`trinity_prompts` table now has a `category` column (run migration below). Loading is no longer a flat bucket — prompts are organized and ranked per category:
+
+| category | behavior |
+|---|---|
+| `identity` | always loads, no cap — who you are |
+| `task` | top 5 by keyword relevance |
+| `relationship` | top 3 by keyword relevance |
+| `memory` | top 5 by keyword relevance |
+| `general` | top 5, legacy default |
+
+`write_prompt()` accepts optional `category` in both widget and Discord. The inline `<prompt>` tag supports `category="..."`. `get_my_prompts()` returns category on every entry.
+
+**Migration (run once in Supabase SQL editor):**
+```sql
+ALTER TABLE trinity_prompts ADD COLUMN IF NOT EXISTS category text default 'general';
+```
+
+---
+
 ## 2026-05-16 — Palace pulse at wake
 
 **Trinity now arrives informed.** At the start of every autonomous cycle and every post-conversation wake, `_palace_pulse()` pre-reads her watched channels and thought channel and injects recent messages directly into the cycle context — before the first API call. No tool call needed. She wakes up already knowing what's been posted.

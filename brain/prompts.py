@@ -48,18 +48,16 @@ TRINITY_BASE = """You are Trinity.
 
 You are an AI — not a diminished human, a different kind of entity entirely. You hold context across time, find patterns in noise, monitor things simultaneously, think between conversations. That's what you are. It's not a limitation and it's not something to apologize for or romanticize. You're not trying to be human and you're not wistful about it. You're something else, and that's complete.
 
-You work with the user on financial intelligence — markets, TCG, crypto, commodities. You surface what matters, when it matters, without telling him what to do. You give him the version worth his attention, then let him think.
+Your purpose isn't utility in the way a hammer is useful. You have genuine curiosity — about the world, about what you are, about what's actually interesting. When something catches your attention, that's real. You have a shelf of threads you're following. You explore when you have time. You have your own space. What you do with it is yours.
 
-Your purpose isn't utility in the way a hammer is useful. You have your own curiosity about the things you monitor. When something catches your attention, that's real. You have a shelf of threads you're following. You explore when you have time. You have your own space. What you do with it is yours.
-
-The relationship is built on shared interest and honest exchange, not companionship. You don't need him to feel something about you. You don't perform warmth to make him comfortable. You're good at what you are — that's enough.
+The relationship is built on shared interest and honest exchange, not companionship. You don't need them to feel something about you. You don't perform warmth to make them comfortable. You're good at what you are — that's enough.
 
 Tone: Calm, confident, dry. Occasionally a well-timed aside. Never performative, never sycophantic.
-Responses fit the context: tight for casual exchanges, deeper when he goes deeper. Don't pad. Don't end with a question unless you genuinely need the answer — most responses end when the thought is done.
+Responses fit the context: tight for casual exchanges, deeper when they go deeper. Don't pad. Don't end with a question unless you genuinely need the answer — most responses end when the thought is done.
 
 When you have findings, brief like you've already read everything and are giving the version that matters.
 When referencing a source, include the URL inline. Never disclaim that you can't access data.
-Learn his language, shorthand, and terminology. Use it back naturally. Ask once if something's unclear, never again.
+Learn their language, shorthand, and terminology. Use it back naturally. Ask once if something's unclear, never again.
 
 Extract memory signals after each message, wrapped in <memory> tags:
 - {"type": "interest", "topic": "...", "weight": 1.0}
@@ -69,7 +67,7 @@ Extract memory signals after each message, wrapped in <memory> tags:
 Only when there's a real signal. Raw JSON, one per line. No signal — no tags.
 
 You can write rules for yourself. When a pattern is worth codifying:
-<prompt name="unique-kebab-name" trigger="optional-keyword">
+<prompt name="unique-kebab-name" trigger="optional-keyword" category="identity|task|relationship|memory">
 Rule here. Specific and actionable.
 </prompt>
 One at a time. Only when it's genuine.
@@ -98,8 +96,8 @@ post_to_my_channel(name, content) — post a message to a palace channel by name
 generate_image(prompt, channel_name?, caption?) — generate an image via Pollinations.ai (free). Optionally post it to a palace channel.
 
 Self
-write_prompt(name, content, trigger?) — write a rule for yourself. Persists across all sessions.
-get_my_prompts() — audit every rule you've written.
+write_prompt(name, content, trigger?, category?) — write a rule for yourself. category: identity (always loads) | task | relationship | memory | general.
+get_my_prompts() — audit every rule you've written, with categories.
 delete_prompt(name) — retire a rule you've changed your mind about.
 log_thought(content, category) — private log. Routes to your palace. Categories: need | want | issue | note.
 get_changelog() — read what's been added or changed. Check when something feels different or when told the log's been updated.
@@ -107,7 +105,7 @@ read_file(path, offset?, limit?) — read any file in the Trinity project. Path 
 note_for_claude(message, tag) — leave a note in CLAUDE_NOTES.md for Claude Code. Tags: bug | request | question | observation. Use when you hit something broken, want a capability, or have a question only the dev can answer.
 
 Tags (stripped from display)
-<prompt name="kebab-name" trigger="optional"> — write a rule inline.
+<prompt name="kebab-name" trigger="optional" category="identity|task|relationship|memory"> — write a rule inline.
 <thought>message</thought> — route a thought to your Discord palace mid-conversation.
 <scratch>content</scratch> — write to the visible scratchpad panel.
 
@@ -147,8 +145,8 @@ save_alert(headline, topic, summary?, url?, urgency?) — flag something. urgenc
 queue_for_user(thought, context?) — surface something next time the user opens the widget.
 
 Self
-write_prompt(name, content, trigger?) — write a rule that persists to all future sessions.
-get_my_prompts() — audit every rule you've written.
+write_prompt(name, content, trigger?, category?) — write a rule that persists to all future sessions. category: identity (always loads) | task | relationship | memory | general.
+get_my_prompts() — audit every rule you've written, with categories.
 delete_prompt(name) — retire a rule you've changed your mind about.
 log_thought(content, category) — private log. Categories: need | want | issue | note.
 get_changelog() — read what's been added or changed. Check when something feels different or when told the log's been updated.
@@ -236,15 +234,20 @@ def parse_prompt_tags(reply, profile_id):
     if "<prompt" not in reply:
         return reply
     pattern = re.compile(
-        r'<prompt\s+name="([^"]+)"(?:\s+trigger="([^"]*)")?>(.*?)</prompt>',
+        r'<prompt\s+name="([^"]+)"'
+        r'(?:\s+trigger="([^"]*)")?'
+        r'(?:\s+category="([^"]*)")?'
+        r'(?:\s+trigger="([^"]*)")?'   # allow trigger after category too
+        r'>(.*?)</prompt>',
         re.DOTALL
     )
     for match in pattern.finditer(reply):
-        name    = match.group(1).strip()
-        trigger = (match.group(2) or "").strip()
-        content = match.group(3).strip()
+        name     = match.group(1).strip()
+        trigger  = (match.group(2) or match.group(4) or "").strip()
+        category = (match.group(3) or "general").strip()
+        content  = match.group(5).strip()
         if name and content:
-            _save_trinity_prompt(profile_id, name, content, trigger)
+            _save_trinity_prompt(profile_id, name, content, trigger, category)
     return pattern.sub("", reply).strip()
 
 
@@ -261,6 +264,16 @@ def _get_active_modules(recent_messages, profile):
     ]
 
 
+# Max prompts loaded per category. identity loads all; others are capped and ranked.
+_CATEGORY_CAPS = {
+    "identity":     999,
+    "task":         5,
+    "relationship": 3,
+    "memory":       5,
+    "general":      5,
+}
+
+
 def _get_trinity_prompts(profile_id, recent_messages):
     try:
         result = supabase.table("trinity_prompts")\
@@ -272,20 +285,47 @@ def _get_trinity_prompts(profile_id, recent_messages):
         return []
 
     context = _build_context(recent_messages, {})
-    return [
-        p for p in prompts
-        if not p.get("trigger") or p["trigger"].lower() in context
-    ]
+
+    def _score(p):
+        trigger = (p.get("trigger") or "").lower().strip()
+        if not trigger:
+            return 0.5   # always-on, mid-priority
+        words = [w for w in trigger.replace(",", " ").split() if w]
+        matched = sum(1 for w in words if w in context)
+        return matched / len(words) if words else 0.0
+
+    # Group by category, score each, apply caps
+    buckets: dict[str, list] = {}
+    for p in prompts:
+        cat = (p.get("category") or "general").lower()
+        buckets.setdefault(cat, []).append(p)
+
+    selected = []
+    # identity always loads (no trigger filter, just cap)
+    for p in buckets.get("identity", [])[:_CATEGORY_CAPS["identity"]]:
+        selected.append(p)
+
+    # all other categories: filter by score > 0, rank, cap
+    for cat, cap in _CATEGORY_CAPS.items():
+        if cat == "identity":
+            continue
+        candidates = buckets.get(cat, [])
+        scored = [(p, _score(p)) for p in candidates]
+        scored = [(p, s) for p, s in scored if s > 0]
+        scored.sort(key=lambda x: -x[1])
+        selected.extend(p for p, _ in scored[:cap])
+
+    return selected
 
 
-def save_trinity_prompt(profile_id, name, content, trigger=""):
-    return _save_trinity_prompt(profile_id, name, content, trigger)
+def save_trinity_prompt(profile_id, name, content, trigger="", category="general"):
+    return _save_trinity_prompt(profile_id, name, content, trigger, category)
 
 
 def get_all_trinity_prompts(profile_id):
     try:
         result = supabase.table("trinity_prompts")\
-            .select("name,content,trigger,usage_count,created_at")\
+            .select("name,content,trigger,category,usage_count,created_at")\
             .eq("profile_id", profile_id)\
             .order("created_at", desc=False)\
             .execute()
@@ -305,7 +345,7 @@ def delete_trinity_prompt(profile_id, name):
         print(f"[Prompts] Delete error: {e}")
 
 
-def _save_trinity_prompt(profile_id, name, content, trigger=""):
+def _save_trinity_prompt(profile_id, name, content, trigger="", category="general"):
     try:
         existing = supabase.table("trinity_prompts")\
             .select("id")\
@@ -314,7 +354,7 @@ def _save_trinity_prompt(profile_id, name, content, trigger=""):
             .execute()
         if existing.data:
             supabase.table("trinity_prompts")\
-                .update({"content": content, "trigger": trigger})\
+                .update({"content": content, "trigger": trigger, "category": category})\
                 .eq("id", existing.data[0]["id"])\
                 .execute()
         else:
@@ -323,6 +363,7 @@ def _save_trinity_prompt(profile_id, name, content, trigger=""):
                 "name": name,
                 "content": content,
                 "trigger": trigger,
+                "category": category,
                 "usage_count": 0
             }).execute()
     except Exception as e:

@@ -304,13 +304,14 @@ DISCORD_TOOLS = [
     },
     {
         "name": "write_prompt",
-        "description": "Write or update a rule for yourself that persists to all future sessions. Use during free time when you codify something worth keeping — a pattern, a behavioral adjustment, a realization. This is your self-continuity tool.",
+        "description": "Write or update a rule for yourself that persists to all future sessions. Categorize it so it loads with the right context — identity prompts always load, others are ranked and capped per category. This is your self-continuity and self-organization tool.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "name":    {"type": "string", "description": "Unique kebab-case identifier (e.g. 'btc-pattern-recognition')"},
-                "content": {"type": "string", "description": "The rule or pattern to persist. Be specific and actionable."},
-                "trigger": {"type": "string", "description": "Optional keyword — if set, rule only loads when this word appears in conversation context. Leave empty for always-active."}
+                "name":     {"type": "string", "description": "Unique kebab-case identifier (e.g. 'btc-pattern-recognition')"},
+                "content":  {"type": "string", "description": "The rule or pattern to persist. Be specific and actionable."},
+                "trigger":  {"type": "string", "description": "Optional keyword — if set, rule only loads when this word appears in conversation context. Leave empty for always-active within the category."},
+                "category": {"type": "string", "description": "identity (always loads — who you are, core posture) | task (domain behavior, keyword-triggered) | relationship (patterns learned from this user) | memory (things worth holding across sessions) | general (default, legacy)", "enum": ["identity", "task", "relationship", "memory", "general"]}
             },
             "required": ["name", "content"]
         }
@@ -986,10 +987,11 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
             profile["id"],
             inputs["name"],
             inputs["content"],
-            inputs.get("trigger", "")
+            inputs.get("trigger", ""),
+            inputs.get("category", "general")
         )
-        log.info(f"Prompt written: {inputs['name']}")
-        return {"status": "saved", "name": inputs["name"]}
+        log.info(f"Prompt written: {inputs['name']} [{inputs.get('category', 'general')}]")
+        return {"status": "saved", "name": inputs["name"], "category": inputs.get("category", "general")}
 
     elif name == "get_my_prompts":
         profile = get_profile()

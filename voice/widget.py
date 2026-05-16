@@ -296,13 +296,14 @@ WIDGET_TOOLS = [
     },
     {
         "name": "write_prompt",
-        "description": "Write a rule for yourself that persists to all future sessions. Use to codify patterns, behavioral adjustments, or realizations worth keeping.",
+        "description": "Write a rule for yourself that persists to all future sessions. Use to codify patterns, behavioral adjustments, or realizations worth keeping. Categorize so it loads with the right context.",
         "input_schema": {
             "type": "object",
             "properties": {
-                "name":    {"type": "string", "description": "Unique kebab-case identifier"},
-                "content": {"type": "string", "description": "The rule — specific and actionable"},
-                "trigger": {"type": "string", "description": "Keyword to trigger this rule (empty = always active)"}
+                "name":     {"type": "string", "description": "Unique kebab-case identifier"},
+                "content":  {"type": "string", "description": "The rule — specific and actionable"},
+                "trigger":  {"type": "string", "description": "Keyword to trigger this rule (empty = always active within its category)"},
+                "category": {"type": "string", "description": "identity (always loads, who you are) | task (domain behavior, keyword-triggered) | relationship (user-specific patterns) | memory (things worth holding) | general (default)", "enum": ["identity", "task", "relationship", "memory", "general"]}
             },
             "required": ["name", "content"]
         }
@@ -575,9 +576,10 @@ class TrinityWorker(QThread):
                 self.profile_id,
                 inputs["name"],
                 inputs["content"],
-                inputs.get("trigger", "")
+                inputs.get("trigger", ""),
+                inputs.get("category", "general")
             )
-            return {"status": "saved", "name": inputs["name"]}
+            return {"status": "saved", "name": inputs["name"], "category": inputs.get("category", "general")}
 
         elif name == "get_my_prompts":
             from brain.prompts import get_all_trinity_prompts
