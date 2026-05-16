@@ -602,7 +602,7 @@ class TrinityWorker(QThread):
 
     def _read_discord_channel(self, name_query, limit=20):
         try:
-            import urllib.request
+            import urllib.request, urllib.error
             from brain.memory import get_profile as _gp
             profile   = _gp()
             guild_id  = (profile.get("discord_home_guild_id") if profile else None) or os.getenv("DISCORD_HOME_GUILD_ID")
@@ -645,7 +645,12 @@ class TrinityWorker(QThread):
                     ]
                 result.append(entry)
             return result
+        except urllib.error.HTTPError as e:
+            body = e.read().decode("utf-8", errors="ignore")
+            log.error(f"read_discord_channel HTTP {e.code}: {body[:200]}")
+            return {"error": f"HTTP {e.code}: {body[:200]}"}
         except Exception as e:
+            log.error(f"read_discord_channel error: {e}")
             return {"error": str(e)}
 
 
