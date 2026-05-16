@@ -1,5 +1,13 @@
 # Trinity Changelog
 
+## 2026-05-16 — Widget Discord reads fixed
+
+**Root cause found:** the widget was using Python's `urllib` to make direct Discord API calls. Cloudflare (which sits in front of Discord's API) blocks requests with a `Python-urllib` user agent and returns error code 1010. Switched to the `requests` library with a proper Discord bot `User-Agent` header — reads now work from the widget.
+
+This was unrelated to bot permissions, token validity, or server settings. The discord.py bot was never affected because it uses a WebSocket connection, not raw HTTP.
+
+---
+
 ## 2026-05-16 — UI scaling + TTS blank fix
 
 **Widget doubled in size** — width 340→680px, response area 160→320px, fonts scaled up throughout. Should be readable without squinting.
