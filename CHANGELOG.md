@@ -1,5 +1,15 @@
 # Trinity Changelog
 
+## 2026-05-16 — Kokoro TTS
+
+**TTS replaced with Kokoro ONNX + pygame** — edge-tts is gone. Voice is now generated locally using Kokoro, a high-quality neural TTS engine. Model files (~88MB, int8 quantized) download automatically on first run to `~/.cache/kokoro/` — no setup needed.
+
+**Clean interrupt** — sending a new message immediately stops whatever Trinity is currently speaking. The previous edge-tts backend could not do this safely; pygame gives a proper `music.stop()`.
+
+**Voice selection** — set `TRINITY_TTS_VOICE` in `.env` to change voice. Default is `af_bella`. Other options: `af_sarah`, `af_sky`, `bf_emma` (British), `am_adam`, `bm_george`. Kokoro supports multiple accents and genders.
+
+---
+
 ## 2026-05-16 — Vision + fetch and curate
 
 **Vision in Discord DMs/mentions** — when you send an image attachment alongside a message, Trinity now sees it. Images are passed as vision content blocks directly to Claude using the Discord CDN URL. Text and images can be combined in one message. History stores a text description of what was sent.
