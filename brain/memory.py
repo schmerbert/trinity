@@ -308,6 +308,58 @@ def get_upcoming_events(profile_id, days=7):
         return []
 
 
+# ─── Keyword watches ─────────────────────────────────────────────────────────
+#
+# Migration (run once in Supabase SQL editor):
+#
+# create table trinity_watches (
+#   id          uuid primary key default gen_random_uuid(),
+#   profile_id  uuid references profiles(id),
+#   keyword     text not null,
+#   note        text,
+#   active      boolean default true,
+#   created_at  timestamp default now(),
+#   unique(profile_id, keyword)
+# );
+# alter table trinity_watches enable row level security;
+# create policy "allow all" on trinity_watches for all using (true);
+#
+def set_watch(profile_id, keyword, note=""):
+    try:
+        supabase.table("trinity_watches").upsert({
+            "profile_id": profile_id,
+            "keyword":    keyword.lower().strip(),
+            "note":       note,
+            "active":     True
+        }, on_conflict="profile_id,keyword").execute()
+        return {"status": "watching", "keyword": keyword}
+    except Exception as e:
+        return {"error": str(e)}
+
+def clear_watch(profile_id, keyword):
+    try:
+        supabase.table("trinity_watches")\
+            .delete()\
+            .eq("profile_id", profile_id)\
+            .ilike("keyword", f"%{keyword.lower().strip()}%")\
+            .execute()
+        return {"status": "cleared", "keyword": keyword}
+    except Exception as e:
+        return {"error": str(e)}
+
+def get_watches(profile_id):
+    try:
+        result = supabase.table("trinity_watches")\
+            .select("keyword, note, created_at")\
+            .eq("profile_id", profile_id)\
+            .eq("active", True)\
+            .order("created_at", desc=False)\
+            .execute()
+        return result.data or []
+    except Exception as e:
+        return []
+
+
 def delete_calendar_event(profile_id, title):
     """Delete a calendar event by title (case-insensitive partial match)."""
     try:

@@ -57,6 +57,7 @@ OWNER_ID           = int(OWNER_ID) if OWNER_ID.isdigit() else 0
 AUTONOMOUS_MINUTES = int(os.getenv("DISCORD_AUTONOMOUS_INTERVAL", "60"))
 _LOG_CHANNEL_ID    = int(os.getenv("TRINITY_LOG_CHANNEL_ID",     "0") or "0")
 _THOUGHT_CHANNEL_ID = int(os.getenv("TRINITY_THOUGHT_CHANNEL_ID", "0") or "0")
+_FEED_CHANNEL_ID    = int(os.getenv("TRINITY_FEED_CHANNEL_ID",    "0") or "0")
 _HOME_GUILD_ID_ENV  = os.getenv("DISCORD_HOME_GUILD_ID", "")
 
 intents = discord.Intents.default()
@@ -69,6 +70,7 @@ _watched_channels: set[int]      = set()
 _api_lock = asyncio.Semaphore(1)
 _last_eyes_check: datetime       = datetime.utcnow()
 _skip_next_autonomous: bool      = False
+_feed_seen_hashes:  set          = set()  # populated on_ready, prevents backlog flood
 
 # ─── Tools Trinity can use ───────────────────────────────────────────────────
 
@@ -308,6 +310,34 @@ DISCORD_TOOLS = [
         }
     },
     {
+        "name": "set_watch",
+        "description": "Register a keyword to watch for in Discord messages. When a message in a watched channel matches, it triggers an immediate wake rather than waiting for the next cycle. Use for token names, specific terms, or anything time-sensitive you want to catch as it happens.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "keyword": {"type": "string", "description": "The keyword or phrase to watch for (case-insensitive)"},
+                "note":    {"type": "string", "description": "Why you're watching this — for your own reference"}
+            },
+            "required": ["keyword"]
+        }
+    },
+    {
+        "name": "clear_watch",
+        "description": "Remove a keyword watch.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "keyword": {"type": "string", "description": "The keyword to stop watching"}
+            },
+            "required": ["keyword"]
+        }
+    },
+    {
+        "name": "get_watches",
+        "description": "List all active keyword watches.",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
         "name": "save_alert",
         "description": "Flag something as worth surfacing to the user. Saved to the alert feed — the widget will wake up and brief them.",
         "input_schema": {
@@ -513,6 +543,7 @@ _BACKGROUND_TOOL_NAMES = {
     "get_changelog", "read_file", "send_image", "note_for_claude",
     "post_to_my_channel", "generate_image", "send_email",
     "get_wallet_balance", "get_wallet_history", "get_token_price",
+    "set_watch", "clear_watch", "get_watches",
     "mark_date", "get_upcoming", "delete_event"
 }
 DISCORD_TOOLS_BACKGROUND = [
@@ -541,6 +572,16 @@ async def on_ready():
     eyes_monitor.start()
     thought_drain.start()
     wake_checker.start()
+    # Seed seen feed hashes so first poll doesn't flood the channel with backlog
+    global _feed_seen_hashes
+    from brain.feeds import seed_seen as _seed_feeds
+    _feed_seen_hashes = await asyncio.get_event_loop().run_in_executor(None, _seed_feeds)
+    log.info(f"[feeds] seeded {len(_feed_seen_hashes)} existing headlines")
+    if _FEED_CHANNEL_ID:
+        rss_feed.start()
+        log.info("[feeds] RSS feed task started")
+    else:
+        log.info("[feeds] TRINITY_FEED_CHANNEL_ID not set — RSS feed disabled")
     asyncio.create_task(_startup_brief())
 
 
@@ -551,6 +592,7 @@ async def on_message(message: discord.Message):
 
     if message.channel.id in _watched_channels:
         await _ingest_signal(message)
+        asyncio.create_task(_check_keyword_watches(message))
 
     is_dm      = isinstance(message.channel, discord.DMChannel)
     is_mention = bot.user in message.mentions
@@ -578,6 +620,47 @@ async def on_raw_reaction_add(payload: discord.RawReactionActionEvent):
         return
 
     await _handle_reaction(message, str(payload.emoji))
+
+# ─── Keyword watch trigger ───────────────────────────────────────────────────
+
+async def _check_keyword_watches(message: discord.Message):
+    """If a message in a watched channel matches a keyword watch, fire an immediate wake."""
+    if _api_lock.locked():
+        return
+    profile = get_profile()
+    if not profile:
+        return
+    from brain.memory import get_watches as _get_watches
+    watches = _get_watches(profile["id"])
+    if not watches:
+        return
+    text    = message.content.lower()
+    matched = [w for w in watches if w["keyword"].lower() in text]
+    if not matched:
+        return
+    kws       = ", ".join(w["keyword"] for w in matched)
+    guild_name = message.guild.name if message.guild else "DM"
+    chan_name  = getattr(message.channel, "name", "unknown")
+    log.info(f"[watches] keyword match: {kws} in #{chan_name}")
+    summaries     = get_recent_summaries(profile["id"])
+    system_blocks = build_system_blocks(profile, format_summaries(summaries), [], discord_mode=True)
+    why_lines = " / ".join(
+        f"'{w['keyword']}'" + (f" — {w['note']}" if w.get("note") else "") for w in matched
+    )
+    context = (
+        f"Watch triggered — keyword{'s' if len(matched) > 1 else ''} matched: {kws}\n\n"
+        f"Source: #{chan_name} in {guild_name}\n"
+        f"Author: {message.author.display_name}\n"
+        f"Message: {message.content[:500]}\n\n"
+        f"You set a watch for: {why_lines}\n\n"
+        f"This fired immediately because you asked it to. Decide what, if anything, warrants action."
+    )
+    try:
+        await _call_trinity(system_blocks, [{"role": "user", "content": context}], profile["id"], retry=False, background=True)
+        log.info(f"[watches] wake complete for: {kws}")
+    except Exception as e:
+        log.error(f"[watches] wake failed: {e}")
+
 
 # ─── Channel watch list ───────────────────────────────────────────────────────
 
@@ -1142,6 +1225,31 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         except Exception as e:
             return {"error": str(e)}
 
+    elif name == "set_watch":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        from brain.memory import set_watch as _set_watch
+        result = _set_watch(profile["id"], inputs["keyword"], inputs.get("note", ""))
+        log.info(f"👁 watch set: {inputs['keyword']}")
+        return result
+
+    elif name == "clear_watch":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        from brain.memory import clear_watch as _clear_watch
+        result = _clear_watch(profile["id"], inputs["keyword"])
+        log.info(f"👁 watch cleared: {inputs['keyword']}")
+        return result
+
+    elif name == "get_watches":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        from brain.memory import get_watches as _get_watches
+        return {"watches": _get_watches(profile["id"])}
+
     elif name == "get_wallet_balance":
         try:
             from brain.wallet import get_wallet_balance as _get_balance
@@ -1588,6 +1696,38 @@ async def before_thought_drain():
     await bot.wait_until_ready()
 
 
+# ─── RSS headline feed ───────────────────────────────────────────────────────
+
+@tasks.loop(minutes=5)
+async def rss_feed():
+    if not _FEED_CHANNEL_ID:
+        return
+    channel = bot.get_channel(_FEED_CHANNEL_ID)
+    if not channel:
+        return
+    try:
+        from brain.feeds import fetch_new_items, format_headline
+        new_items = await asyncio.get_event_loop().run_in_executor(
+            None, lambda: fetch_new_items(_feed_seen_hashes)
+        )
+        if not new_items:
+            return
+        for item in new_items:
+            _feed_seen_hashes.add(item["hash"])
+            try:
+                await channel.send(format_headline(item))
+                await asyncio.sleep(0.5)
+            except Exception as e:
+                log.warn(f"[feeds] failed to post: {e}")
+        log.info(f"[feeds] posted {len(new_items)} new headline{'s' if len(new_items) != 1 else ''}")
+    except Exception as e:
+        log.error(f"[feeds] {e}")
+
+@rss_feed.before_loop
+async def before_rss_feed():
+    await bot.wait_until_ready()
+
+
 # ─── Post-conversation wake cycle ────────────────────────────────────────────
 
 async def _bridge_wake(profile_id: str, minutes: int = 30):
@@ -1670,6 +1810,8 @@ def _fmt_tool_call(name: str, inputs: dict) -> str:
         "mark_date":         lambda i: f"{i.get('title','')} → {i.get('event_date','')[:10]}",
         "get_upcoming":      lambda i: f"{i.get('days', 7)}d",
         "delete_event":      lambda i: i.get("title", ""),
+        "set_watch":         lambda i: i.get("keyword", ""),
+        "clear_watch":       lambda i: i.get("keyword", ""),
     }
     detail = key_fields.get(name, lambda i: "")(inputs)
     return f"{name}({detail})" if detail else name

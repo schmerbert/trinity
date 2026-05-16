@@ -475,6 +475,34 @@ WIDGET_TOOLS = [
         }
     },
     {
+        "name": "set_watch",
+        "description": "Register a keyword to watch for in Discord messages. When a message in a watched channel matches, it triggers an immediate wake rather than waiting for the next cycle. Use for token names, specific terms, or anything time-sensitive you want to catch as it happens.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "keyword": {"type": "string", "description": "The keyword or phrase to watch for (case-insensitive)"},
+                "note":    {"type": "string", "description": "Why you're watching this — for your own reference"}
+            },
+            "required": ["keyword"]
+        }
+    },
+    {
+        "name": "clear_watch",
+        "description": "Remove a keyword watch.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "keyword": {"type": "string", "description": "The keyword to stop watching"}
+            },
+            "required": ["keyword"]
+        }
+    },
+    {
+        "name": "get_watches",
+        "description": "List all active keyword watches.",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
         "name": "post_to_my_channel",
         "description": "Post a message to one of your Discord palace channels by name. Use for palace updates, archiving findings, or leaving notes in your own channels.",
         "input_schema": {
@@ -839,6 +867,27 @@ class TrinityWorker(QThread):
             if not profile:
                 return {"error": "No profile"}
             return _del(profile["id"], inputs["title"])
+
+        elif name == "set_watch":
+            from brain.memory import set_watch as _set_watch, get_profile as _gp
+            profile = _gp()
+            if not profile:
+                return {"error": "No profile"}
+            return _set_watch(profile["id"], inputs["keyword"], inputs.get("note", ""))
+
+        elif name == "clear_watch":
+            from brain.memory import clear_watch as _clear_watch, get_profile as _gp
+            profile = _gp()
+            if not profile:
+                return {"error": "No profile"}
+            return _clear_watch(profile["id"], inputs["keyword"])
+
+        elif name == "get_watches":
+            from brain.memory import get_watches as _get_watches, get_profile as _gp
+            profile = _gp()
+            if not profile:
+                return {"error": "No profile"}
+            return {"watches": _get_watches(profile["id"])}
 
         elif name == "post_to_my_channel":
             try:

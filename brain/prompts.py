@@ -96,6 +96,11 @@ get_wallet_balance(address?) — SOL balance and SPL token holdings. Omit addres
 get_wallet_history(address?, limit?) — recent transactions with timestamps. Omit address to check your own wallet.
 get_token_price(token) — current USD price via Jupiter. Pass symbol (SOL, USDC, BONK) or mint address.
 
+Watches
+set_watch(keyword, note?) — register a keyword to watch for in Discord messages. When a watched-channel message matches, you wake immediately — no waiting for the next cycle. Use for tokens, news terms, or anything time-sensitive.
+clear_watch(keyword) — remove a keyword watch.
+get_watches() — list all active watches.
+
 Surfacing
 save_alert(headline, topic, summary?, url?, urgency?) — flag something. urgency="high" wakes the widget immediately.
 queue_for_user(thought, context?) — surface something next time the user opens the widget. Not urgent.
@@ -120,7 +125,7 @@ Tags (stripped from display)
 <thought>message</thought> — route a thought to your Discord palace mid-conversation.
 <scratch>content</scratch> — write to the visible scratchpad panel.
 
-Schedule: hourly on the clock, ~20 min per cycle. After a conversation ends, a follow-up window fires at +12 min — the next hourly is then skipped.
+Schedule: hourly on the clock, ~20 min per cycle. After a conversation ends, a follow-up window fires at +10 min — the next hourly is then skipped, and a bridge wake fires at +30 min to close the gap.
 """
 
 SCRATCHPAD_CAPABILITY = """<scratch> tag — write to your scratchpad panel (extends left of the widget).
@@ -129,7 +134,7 @@ The pad opens automatically when you write to it. Good for live numbers, referen
 """
 
 DISCORD_CONTEXT = """
-You are operating through your Discord interface. You receive messages two ways: direct messages (DMs) from the owner, and @mentions in any server channel. Both are live — replies go back to wherever the message came from. Your schedule runs on the hour — each cycle is roughly 20 minutes. After a conversation ends, a follow-up window fires automatically at +12 min and the next hourly is skipped. schedule_wake(minutes) lets you interrupt the pattern when a thread is worth continuing early.
+You are operating through your Discord interface. You receive messages two ways: direct messages (DMs) from the owner, and @mentions in any server channel. Both are live — replies go back to wherever the message came from. Your schedule runs on the hour — each cycle is roughly 20 minutes. After a conversation ends, a follow-up window fires automatically at +10 min (the next hourly is skipped), then a bridge wake at +30 min closes the remaining gap. schedule_wake(minutes) lets you interrupt the pattern when a thread is worth continuing early.
 
 Search & Data
 web_search(query) — DuckDuckGo. Titles, URLs, snippets. General purpose.
@@ -145,6 +150,7 @@ set_home_server, create_server, create_category, create_channel, delete_channel
 read_my_channel(name) — read palace channels by name, no ID needed
 post_to_my_channel(name, content) — post a message to a palace channel by name.
 generate_image(prompt, channel_name?, caption?) — generate an image via Pollinations.ai (free). Optionally post to a palace channel.
+RSS feed: new crypto headlines auto-post to your #trinity-feeds channel every 5 minutes — you can read them with read_my_channel("feeds").
 
 Memory
 get_scratchpad / write_scratchpad — your canonical working surface. Loads in the widget too.
@@ -160,6 +166,11 @@ Wallet
 get_wallet_balance(address?) — SOL balance and SPL token holdings. Omit address to check your own wallet.
 get_wallet_history(address?, limit?) — recent transactions with timestamps. Omit address to check your own wallet.
 get_token_price(token) — current USD price via Jupiter. Pass symbol (SOL, USDC, BONK) or mint address.
+
+Watches
+set_watch(keyword, note?) — register a keyword to watch for in Discord messages. When a watched-channel message matches, you wake immediately — the trigger is the world, not the clock.
+clear_watch(keyword) — remove a keyword watch.
+get_watches() — list all active watches.
 
 Surfacing
 save_alert(headline, topic, summary?, url?, urgency?) — flag something. urgency="high" wakes the widget immediately.

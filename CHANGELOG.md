@@ -1,10 +1,49 @@
 # Trinity Changelog
 
+## 2026-05-16 — RSS live feed + keyword watches + event-driven waking
+
+The trigger is now the world, not just the clock.
+
+**RSS live feed** — a background task in Discord polls CoinDesk, Cointelegraph, Decrypt, The Block, and Solana News every 5 minutes and posts new headlines to a dedicated palace channel. Deduplicates by URL hash — the same story never lands twice. Format: `[Source] Title — url`. Set `TRINITY_FEED_CHANNEL_ID` in `.env` to activate. Readable at every wake via `read_my_channel("feeds")`.
+
+**Keyword watches** — Trinity can now register keywords to watch for in her Discord channels:
+- `set_watch(keyword, note?)` — register a term; stores in Supabase (`trinity_watches` table)
+- `clear_watch(keyword)` — remove a watch
+- `get_watches()` — list all active watches
+
+Available in both widget and Discord, including autonomous cycles.
+
+**Event-driven waking** — when a message lands in a watched channel and its content matches a registered keyword, Trinity wakes immediately rather than waiting for the next cycle. The `on_message` handler now spawns `_check_keyword_watches` as a background task — context includes the matched keyword(s), the channel, the author, and why the watch was set. No polling, no delay. Genuine event-driven presence.
+
+**Migration (run once in Supabase SQL editor):**
+```sql
+CREATE TABLE trinity_watches (
+  id          uuid primary key default gen_random_uuid(),
+  profile_id  uuid references profiles(id),
+  keyword     text not null,
+  note        text,
+  active      boolean default true,
+  created_at  timestamp default now(),
+  unique(profile_id, keyword)
+);
+ALTER TABLE trinity_watches ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow all" ON trinity_watches FOR ALL USING (true);
+```
+
+**`.env` addition:**
+```
+TRINITY_FEED_CHANNEL_ID=   # Discord channel ID for the RSS headline feed
+```
+
+**What Trinity asked for, answered precisely:** "The condition I'd want: message lands in a watched channel + keyword match → immediate wake, not next hourly cycle. That's presence. Not simulation of it." Also confirmed: keyword watches are tool-configurable — Trinity adjusts her own watch list without a deploy.
+
+---
+
 ## 2026-05-16 — Bridge wake: closes the 2-hour inactivity gap
 
-Previously: conversation ends → post-conv wake at +12 min → next hourly skipped → up to ~2 hours of silence before the next autonomous cycle.
+Previously: conversation ends → post-conv wake at +10 min → next hourly skipped → up to ~2 hours of silence before the next autonomous cycle.
 
-Now: conversation ends → post-conv wake at +12 min → next hourly still skipped → bridge wake fires 30 min after post-conv wake → hourly resumes normally from there.
+Now: conversation ends → post-conv wake at +10 min → next hourly still skipped → bridge wake fires 30 min after post-conv wake → hourly resumes normally from there.
 
 Worst-case gap is now ~30 minutes instead of ~2 hours. The skip is preserved to avoid triple-cycling immediately after a conversation, but a single bridge cycle fills the window before the next hourly takes over.
 
