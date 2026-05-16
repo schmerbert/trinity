@@ -656,8 +656,8 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
                     ]
                 msgs.append(entry)
         except discord.Forbidden as e:
-            log.error(f"read_channel 403 on #{channel.name} (id={channel.id}): {e.text}")
-            return {"error": f"403 {e.text}"}
+            log.error(f"read_channel 403 on #{channel.name} (id={channel.id}): code={e.code} text='{e.text}' full='{e}'")
+            return {"error": f"403 {e}"}
         except Exception as e:
             log.error(f"read_channel error on #{channel.name}: {e}")
             return {"error": str(e)}
@@ -910,8 +910,8 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
                     ]
                 msgs.append(entry)
         except discord.Forbidden as e:
-            log.error(f"read_my_channel 403 on #{channel.name} (id={channel.id}): {e.text}")
-            return {"error": f"403 {e.text}"}
+            log.error(f"read_my_channel 403 on #{channel.name} (id={channel.id}): code={e.code} text='{e.text}' full='{e}'")
+            return {"error": f"403 {e}"}
         except Exception as e:
             log.error(f"read_my_channel error on #{channel.name}: {e}")
             return {"error": str(e)}
