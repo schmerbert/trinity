@@ -42,7 +42,8 @@ from brain.memory import (
     add_interest, add_feedback, save_conversation_summary,
     get_recent_summaries, get_unseen_alerts, mark_alerts_seen,
     process_feedback, get_queued_thoughts, clear_queued_thoughts,
-    push_discord_write, update_last_seen, get_scratchpad, save_scratchpad
+    push_discord_write, update_last_seen, get_scratchpad, save_scratchpad,
+    request_wake
 )
 
 # --- Colors ---
@@ -715,6 +716,10 @@ class TrinityWidget(QMainWindow):
 
         self._log("trinity", clean)
         log.info(f"Response ({len(clean)} chars){' [scratch]' if self._scratchpad and self._scratchpad._visible else ''}")
+        try:
+            request_wake(self.profile["id"])
+        except Exception:
+            pass
         self._display(clean)
         self.wave.set_state("idle")
         self.status_label.setText("watching")

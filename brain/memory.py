@@ -221,6 +221,33 @@ def get_wake_history(profile_id, limit=3):
     history = profile.get("wake_history") or []
     return history[-limit:]
 
+# ─── Post-conversation wake request ──────────────────────────────────────────
+#
+# alter table profiles add column if not exists wake_requested_at timestamp;
+#
+def request_wake(profile_id, minutes=12):
+    from datetime import datetime, timedelta
+    wake_at = (datetime.utcnow() + timedelta(minutes=minutes)).isoformat()
+    return update_profile(profile_id, {"wake_requested_at": wake_at})
+
+def pop_wake_request(profile_id):
+    """Returns True and clears the request if the scheduled time has passed."""
+    from datetime import datetime, timezone
+    profile = get_profile()
+    wake_at = profile.get("wake_requested_at")
+    if not wake_at:
+        return False
+    try:
+        wake_dt = datetime.fromisoformat(wake_at.replace("Z", "+00:00"))
+        if wake_dt.tzinfo is None:
+            wake_dt = wake_dt.replace(tzinfo=timezone.utc)
+        if datetime.now(timezone.utc) < wake_dt:
+            return False
+    except Exception:
+        return False
+    update_profile(profile_id, {"wake_requested_at": None})
+    return True
+
 # ─── Persistent scratchpad ────────────────────────────────────────────────────
 #
 # alter table profiles add column if not exists scratchpad_text text default '';

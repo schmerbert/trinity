@@ -22,7 +22,7 @@ from brain.memory import (
     get_shelf, add_to_shelf, remove_from_shelf,
     get_queued_thoughts, queue_thought, clear_queued_thoughts,
     pop_discord_writes, log_wake_cycle, get_wake_history,
-    get_scratchpad, save_scratchpad
+    get_scratchpad, save_scratchpad, request_wake, pop_wake_request
 )
 from brain.prompts import build_system_blocks, build_prompt, format_summaries, parse_prompt_tags, save_trinity_prompt
 from brain.logger import get_logger
@@ -332,6 +332,7 @@ async def on_ready():
     log.info(f"Autonomous loop every {AUTONOMOUS_MINUTES} min | Eyes every 2 min | Thought drain every 30s")
     eyes_monitor.start()
     thought_drain.start()
+    wake_checker.start()
     asyncio.create_task(_startup_brief())
 
 
@@ -985,6 +986,36 @@ async def thought_drain():
 async def before_thought_drain():
     await bot.wait_until_ready()
 
+
+# ─── Post-conversation wake cycle ────────────────────────────────────────────
+
+@tasks.loop(seconds=30)
+async def wake_checker():
+    profile = get_profile()
+    if not profile:
+        return
+    if not pop_wake_request(profile["id"]):
+        return
+    if _api_lock.locked():
+        return
+    summaries     = get_recent_summaries(profile["id"])
+    system_blocks = build_system_blocks(profile, format_summaries(summaries), [], discord_mode=True)
+    context = (
+        "You just finished a conversation. This is your follow-up window — "
+        "check your shelf, write a rule if something clicked, explore anything worth pursuing. "
+        "No need to log unless it's genuinely worth keeping."
+    )
+    try:
+        await _call_trinity(system_blocks, [{"role": "user", "content": context}], profile["id"], retry=False, background=True)
+        log.info("Post-conversation wake complete")
+    except Exception as e:
+        log.error(f"Wake checker: {e}")
+
+@wake_checker.before_loop
+async def before_wake_checker():
+    await bot.wait_until_ready()
+
+
 # ─── Agentic response loop ────────────────────────────────────────────────────
 
 async def _call_trinity(system_blocks: list, messages: list, profile_id: str, retry: bool = True, background: bool = False) -> str:
@@ -1102,6 +1133,8 @@ async def _respond(message: discord.Message):
 
         for chunk in [clean[i:i + 1900] for i in range(0, len(clean), 1900)]:
             await message.reply(chunk)
+
+        request_wake(profile["id"])
 
 # ─── Reaction handler ────────────────────────────────────────────────────────
 
