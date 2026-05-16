@@ -100,6 +100,7 @@ get_my_prompts() — audit every rule you've written.
 delete_prompt(name) — retire a rule you've changed your mind about.
 log_thought(content, category) — private log. Routes to your palace. Categories: need | want | issue | note.
 get_changelog() — read what's been added or changed. Check when something feels different or when told the log's been updated.
+read_file(path, offset?, limit?) — read any file in the Trinity project. Path relative to Trinity root (e.g. 'brain/prompts.py'). Pass a directory path to list contents. .env is blocked.
 
 Tags (stripped from display)
 <prompt name="kebab-name" trigger="optional"> — write a rule inline.
@@ -145,6 +146,7 @@ get_my_prompts() — audit every rule you've written.
 delete_prompt(name) — retire a rule you've changed your mind about.
 log_thought(content, category) — private log. Categories: need | want | issue | note.
 get_changelog() — read what's been added or changed. Check when something feels different or when told the log's been updated.
+read_file(path, offset?, limit?) — read any file in the Trinity project. Path relative to Trinity root (e.g. 'brain/prompts.py'). Pass a directory path to list contents. .env is blocked.
 
 Your Discord server is your memory palace. Build it however you like. trinity_only channels are invisible to everyone else.
 """

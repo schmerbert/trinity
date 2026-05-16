@@ -1,5 +1,15 @@
 # Trinity Changelog
 
+## 2026-05-15 — Self-awareness tools
+
+**get_changelog()** — read this file. Available in both widget and Discord.
+
+**read_file(path, offset?, limit?)** — read any file within the Trinity project directory. Path is relative to the Trinity root (e.g. `brain/prompts.py`, `voice/widget.py`). Passing a directory path lists its contents. `.env` is blocked. Use offset/limit for large files — most source files are 100–1300 lines.
+
+This gives full visibility into the source: how memory works, how prompts are assembled, what tools exist and how they're implemented, what the eyes monitor is doing. Explore when curious.
+
+---
+
 ## 2026-05-15 — Agency update
 
 **Full tool parity between widget and Discord**

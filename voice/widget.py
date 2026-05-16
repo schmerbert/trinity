@@ -310,6 +310,19 @@ WIDGET_TOOLS = [
         "name": "get_changelog",
         "description": "Read what's been added, changed, or improved in Trinity. Check this when something feels different, when you want to understand your own capabilities, or when the user mentions an update.",
         "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
+        "name": "read_file",
+        "description": "Read any file within the Trinity project directory. Use to understand your own source code, inspect configs, or review logs. Paths are relative to the Trinity root (e.g. 'brain/prompts.py', 'voice/widget.py'). .env is blocked. Use offset and limit for large files.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path":   {"type": "string", "description": "File path relative to Trinity root"},
+                "offset": {"type": "integer", "description": "Line number to start from (0-indexed, default 0)"},
+                "limit":  {"type": "integer", "description": "Maximum lines to return (default 200, max 500)"}
+            },
+            "required": ["path"]
+        }
     }
 ]
 
@@ -524,6 +537,33 @@ class TrinityWorker(QThread):
             try:
                 changelog_path = Path(__file__).parent.parent / "CHANGELOG.md"
                 return {"content": changelog_path.read_text(encoding="utf-8")}
+            except Exception as e:
+                return {"error": str(e)}
+
+        elif name == "read_file":
+            try:
+                trinity_root = Path(__file__).parent.parent.resolve()
+                requested    = (trinity_root / inputs["path"].lstrip("/\\")).resolve()
+                if not str(requested).startswith(str(trinity_root)):
+                    return {"error": "Path is outside the Trinity directory"}
+                if requested.name == ".env":
+                    return {"error": "Cannot read .env"}
+                if not requested.exists():
+                    return {"error": f"File not found: {inputs['path']}"}
+                if not requested.is_file():
+                    entries = [str(p.relative_to(trinity_root)) for p in requested.iterdir()]
+                    return {"directory": inputs["path"], "entries": sorted(entries)}
+                lines  = requested.read_text(encoding="utf-8", errors="replace").splitlines()
+                offset = max(0, int(inputs.get("offset", 0)))
+                limit  = min(500, int(inputs.get("limit", 200)))
+                chunk  = lines[offset:offset + limit]
+                return {
+                    "path":        inputs["path"],
+                    "total_lines": len(lines),
+                    "offset":      offset,
+                    "returned":    len(chunk),
+                    "content":     "\n".join(f"{offset + i + 1}: {l}" for i, l in enumerate(chunk))
+                }
             except Exception as e:
                 return {"error": str(e)}
 
