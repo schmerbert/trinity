@@ -1,5 +1,15 @@
 # Trinity Changelog
 
+## 2026-05-16 — TTS/text sync + sentence pipeline
+
+**Text and audio now in sync** — instead of the full response appearing all at once before TTS starts, text appears sentence by sentence in lockstep with speech. The widget fills as she speaks.
+
+**Lower first-word latency** — audio for the next sentence is generated in the background while the current one plays (pipeline). This cuts the delay between response arriving and first word spoken down to roughly one sentence worth of inference instead of the full response.
+
+**Stop shows remaining text** — if TTS is interrupted, any unspoken sentences appear in the widget immediately so nothing is lost.
+
+---
+
 ## 2026-05-16 — Kokoro TTS
 
 **TTS replaced with Kokoro ONNX + pygame** — edge-tts is gone. Voice is now generated locally using Kokoro, a high-quality neural TTS engine. Model files (~88MB, int8 quantized) download automatically on first run to `~/.cache/kokoro/` — no setup needed.
