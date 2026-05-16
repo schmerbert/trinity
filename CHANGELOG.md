@@ -1,5 +1,11 @@
 # Trinity Changelog
 
+## 2026-05-16 — Vision + fetch and curate
+
+**Vision in Discord DMs/mentions** — when you send an image attachment alongside a message, Trinity now sees it. Images are passed as vision content blocks directly to Claude using the Discord CDN URL. Text and images can be combined in one message. History stores a text description of what was sent.
+
+**Attachments in channel reads** — `read_channel` and `read_my_channel` now include attachment data (url, filename, content_type) on messages that have them. She can see what images exist in a channel when reading history, then use `send_image` to re-post or `fetch_url` for metadata.
+
 ## 2026-05-16 — Fetch and curate
 
 **fetch_url(url, max_chars?)** — available in both widget and Discord. Fetches content from any URL. HTML pages are stripped to readable text. Image URLs return metadata (type, content_type, size) rather than binary. max_chars caps text output at 4000 by default, 8000 max.

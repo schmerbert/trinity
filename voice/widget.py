@@ -620,10 +620,16 @@ class TrinityWorker(QThread):
             with urllib.request.urlopen(req) as resp:
                 msgs = json.loads(resp.read())
 
-            return [
-                {"author": m["author"]["username"], "content": m["content"], "timestamp": m["timestamp"]}
-                for m in msgs
-            ]
+            result = []
+            for m in msgs:
+                entry = {"author": m["author"]["username"], "content": m["content"], "timestamp": m["timestamp"]}
+                if m.get("attachments"):
+                    entry["attachments"] = [
+                        {"url": a["url"], "filename": a["filename"], "type": a.get("content_type", "")}
+                        for a in m["attachments"]
+                    ]
+                result.append(entry)
+            return result
         except Exception as e:
             return {"error": str(e)}
 

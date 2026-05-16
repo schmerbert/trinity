@@ -638,11 +638,17 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         limit = min(int(inputs.get("limit", 25)), 50)
         msgs = []
         async for msg in channel.history(limit=limit, oldest_first=False):
-            msgs.append({
+            entry = {
                 "author":    str(msg.author.display_name),
                 "content":   msg.content,
                 "timestamp": msg.created_at.isoformat()
-            })
+            }
+            if msg.attachments:
+                entry["attachments"] = [
+                    {"url": a.url, "filename": a.filename, "type": a.content_type or ""}
+                    for a in msg.attachments
+                ]
+            msgs.append(entry)
         return msgs
 
     elif name == "send_message":
@@ -867,11 +873,17 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         limit = min(int(inputs.get("limit", 20)), 50)
         msgs = []
         async for msg in channel.history(limit=limit, oldest_first=False):
-            msgs.append({
+            entry = {
                 "author":    str(msg.author.display_name),
                 "content":   msg.content,
                 "timestamp": msg.created_at.isoformat()
-            })
+            }
+            if msg.attachments:
+                entry["attachments"] = [
+                    {"url": a.url, "filename": a.filename, "type": a.content_type or ""}
+                    for a in msg.attachments
+                ]
+            msgs.append(entry)
         return msgs
 
     elif name == "log_wake":
@@ -1291,8 +1303,24 @@ async def _respond(message: discord.Message):
     user_id   = message.author.id
     history   = _conversations.setdefault(user_id, [])
     user_text = message.content.replace(f"<@{bot.user.id}>", "").strip()
-    if not user_text:
+
+    image_atts = [a for a in message.attachments
+                  if a.content_type and a.content_type.startswith("image/")]
+
+    if not user_text and not image_atts:
         return
+
+    # Build API content — text + image vision blocks if attachments present
+    if image_atts:
+        api_content = []
+        if user_text:
+            api_content.append({"type": "text", "text": user_text})
+        for att in image_atts:
+            api_content.append({"type": "image", "source": {"type": "url", "url": att.url}})
+        history_text = user_text if user_text else f"[sent {len(image_atts)} image(s)]"
+    else:
+        api_content  = user_text
+        history_text = user_text
 
     profile = get_profile()
     if not profile:
@@ -1301,7 +1329,7 @@ async def _respond(message: discord.Message):
 
     summaries     = get_recent_summaries(profile["id"])
     system_blocks = build_system_blocks(profile, format_summaries(summaries), history, discord_mode=True)
-    api_messages  = history + [{"role": "user", "content": user_text}]
+    api_messages  = history + [{"role": "user", "content": api_content}]
 
     async def keep_typing():
         while True:
@@ -1321,7 +1349,7 @@ async def _respond(message: discord.Message):
         clean = _strip_memory(clean, profile)
         clean = re.sub(r'<memory>.*?</memory>', '', clean, flags=re.DOTALL).strip()
 
-        history.append({"role": "user",      "content": user_text})
+        history.append({"role": "user",      "content": history_text})
         history.append({"role": "assistant", "content": clean})
         _conversations[user_id] = history[-20:]
 
