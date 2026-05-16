@@ -1258,7 +1258,7 @@ async def _palace_pulse(limit_per_channel: int = 12) -> tuple[str, list[str]]:
                     if att.content_type and att.content_type.startswith("image/"):
                         if len(image_urls) < 4:  # cap at 4 images per pulse
                             image_urls.append(att.url)
-                        content = (content + f" [image: {att.filename}]").strip()
+                        content = (content + f" [image: {att.filename} — {att.url}]").strip()
                 if content:
                     msgs.append(f"  [{ts}] {author}: {content}")
             if not msgs:

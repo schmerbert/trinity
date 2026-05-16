@@ -1,5 +1,13 @@
 # Trinity Changelog
 
+## 2026-05-16 — Image URLs in palace pulse text
+
+Trinity could see images at wake (via vision blocks) but had no URL in the text context to act on them — so moving an image between channels required regenerating it instead of re-posting the original.
+
+Fixed: `_palace_pulse` now includes the attachment URL inline in the text block: `[image: filename.png — https://cdn...]`. Trinity can pull that URL and pass it to `send_image(url, channel_name)` to move or copy any image she can see.
+
+---
+
 ## 2026-05-16 — Palace images visible at wake
 
 Trinity noticed she could see that images existed in her palace channels but couldn't see what was in them. Fixed.
