@@ -57,6 +57,7 @@ OWNER_ID           = int(OWNER_ID) if OWNER_ID.isdigit() else 0
 AUTONOMOUS_MINUTES = int(os.getenv("DISCORD_AUTONOMOUS_INTERVAL", "30"))
 _LOG_CHANNEL_ID    = int(os.getenv("TRINITY_LOG_CHANNEL_ID",     "0") or "0")
 _THOUGHT_CHANNEL_ID = int(os.getenv("TRINITY_THOUGHT_CHANNEL_ID", "0") or "0")
+_HOME_GUILD_ID_ENV  = os.getenv("DISCORD_HOME_GUILD_ID", "")
 
 intents = discord.Intents.default()
 intents.message_content = True
@@ -309,6 +310,13 @@ async def on_ready():
     log.info(f"Online as {bot.user}")
     await _load_watched_channels()
     await _post_pending_alerts()
+    if _HOME_GUILD_ID_ENV:
+        profile = get_profile()
+        if profile and not profile.get("discord_home_guild_id"):
+            supabase.table("profiles").update({
+                "discord_home_guild_id": _HOME_GUILD_ID_ENV
+            }).eq("id", profile["id"]).execute()
+            log.info(f"Home guild set from env: {_HOME_GUILD_ID_ENV}")
     autonomous_loop.change_interval(minutes=AUTONOMOUS_MINUTES)
     autonomous_loop.start()
     log.info(f"Autonomous loop every {AUTONOMOUS_MINUTES} min | Eyes every 2 min | Thought drain every 30s")

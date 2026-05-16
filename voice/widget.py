@@ -306,7 +306,7 @@ class TrinityWorker(QThread):
             import urllib.request
             from brain.memory import get_profile as _gp
             profile   = _gp()
-            guild_id  = profile.get("discord_home_guild_id") if profile else None
+            guild_id  = (profile.get("discord_home_guild_id") if profile else None) or os.getenv("DISCORD_HOME_GUILD_ID")
             bot_token = os.getenv("DISCORD_BOT_TOKEN")
             if not guild_id or not bot_token:
                 return {"error": "Discord not configured — set home server first"}
