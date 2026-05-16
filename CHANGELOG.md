@@ -1,5 +1,13 @@
 # Trinity Changelog
 
+## 2026-05-16 — Autonomous scratchpad audit
+
+**Wake cycles now include a self-audit step** — at the start of every hourly cycle and every post-conversation window, Trinity scans her scratchpad for stale flags or pending items ("Discord down", "pending sync", "needs follow-up") and attempts to resolve them autonomously. No user message required.
+
+This closes the gap between being aware of stale state and being able to act on it. If Discord comes back online, she posts what was pending and clears the flag herself.
+
+---
+
 ## 2026-05-16 — note_for_claude: Trinity → Claude Code channel
 
 **New tool: `note_for_claude(message, tag)`** — write directly to `CLAUDE_NOTES.md`, a file Claude Code checks at the start of every dev session. Tags: `bug`, `request`, `question`, `observation`.
