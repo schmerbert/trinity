@@ -239,6 +239,41 @@ DISCORD_TOOLS = [
         "input_schema": {"type": "object", "properties": {"topic": {"type": "string"}}, "required": ["topic"]}
     },
     {
+        "name": "mark_date",
+        "description": "Add an event to your personal calendar. Use for anything time-sensitive — earnings, launches, follow-ups, your own deadlines. Loads automatically in context when within 3 days.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title":      {"type": "string", "description": "Event name"},
+                "event_date": {"type": "string", "description": "ISO date or datetime — e.g. '2026-05-20' or '2026-05-20T14:00'"},
+                "notes":      {"type": "string", "description": "Optional context or reminder"}
+            },
+            "required": ["title", "event_date"]
+        }
+    },
+    {
+        "name": "get_upcoming",
+        "description": "Read your upcoming calendar events.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "days": {"type": "integer", "description": "How many days ahead to look (default 7)"}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "delete_event",
+        "description": "Remove a calendar event by title.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Event title or partial match"}
+            },
+            "required": ["title"]
+        }
+    },
+    {
         "name": "save_alert",
         "description": "Flag something as worth surfacing to the user. Saved to the alert feed — the widget will wake up and brief them.",
         "input_schema": {
@@ -425,7 +460,8 @@ _BACKGROUND_TOOL_NAMES = {
     "save_alert", "read_my_channel", "log_wake", "get_scratchpad", "write_scratchpad",
     "schedule_wake", "write_prompt", "get_my_prompts", "delete_prompt", "log_thought",
     "get_changelog", "read_file", "send_image", "note_for_claude",
-    "post_to_my_channel", "generate_image"
+    "post_to_my_channel", "generate_image",
+    "mark_date", "get_upcoming", "delete_event"
 }
 DISCORD_TOOLS_BACKGROUND = [
     t for t in DISCORD_TOOLS if t.get("name") in _BACKGROUND_TOOL_NAMES
@@ -1054,6 +1090,33 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         except Exception as e:
             return {"error": str(e)}
 
+    elif name == "mark_date":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        from brain.memory import mark_date as _mark_date
+        result = _mark_date(profile["id"], inputs["title"], inputs["event_date"], inputs.get("notes", ""))
+        log.info(f"📅 calendar: {inputs['title']} → {inputs['event_date'][:10]}")
+        return result
+
+    elif name == "get_upcoming":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        from brain.memory import get_upcoming_events as _get_upcoming
+        days   = int(inputs.get("days", 7))
+        events = _get_upcoming(profile["id"], days=days)
+        return events if events else {"message": f"Nothing in the next {days} days"}
+
+    elif name == "delete_event":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        from brain.memory import delete_calendar_event as _del
+        result = _del(profile["id"], inputs["title"])
+        log.info(f"📅 calendar deleted: {inputs['title']}")
+        return result
+
     elif name == "post_to_my_channel":
         guild = _home_guild()
         if not guild:
@@ -1461,6 +1524,9 @@ def _fmt_tool_call(name: str, inputs: dict) -> str:
         "log_wake":          lambda i: i.get("summary", "")[:60],
         "write_scratchpad":  lambda i: i.get("content", "")[:60],
         "note_for_claude":   lambda i: f"[{i.get('tag','')}] {i.get('message','')[:50]}",
+        "mark_date":         lambda i: f"{i.get('title','')} → {i.get('event_date','')[:10]}",
+        "get_upcoming":      lambda i: f"{i.get('days', 7)}d",
+        "delete_event":      lambda i: i.get("title", ""),
     }
     detail = key_fields.get(name, lambda i: "")(inputs)
     return f"{name}({detail})" if detail else name

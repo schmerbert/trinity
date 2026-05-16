@@ -1,5 +1,33 @@
 # Trinity Changelog
 
+## 2026-05-16 — Personal calendar
+
+Trinity now has her own calendar — not linked to the user's, just hers. A place to put things that matter in time.
+
+**Tools (widget + Discord, including autonomous cycles):**
+- `mark_date(title, event_date, notes?)` — place an event. ISO date or datetime string.
+- `get_upcoming(days?)` — read what's coming. Default 7 days.
+- `delete_event(title)` — remove by partial title match.
+
+**Automatic context injection** — events within the next 3 days load into the dynamic block at every session start and wake cycle. She arrives already knowing what's near, the same way scratchpad and shelf do. No tool call needed.
+
+**Migration (run once in Supabase SQL editor):**
+```sql
+CREATE TABLE trinity_calendar (
+  id          uuid primary key default gen_random_uuid(),
+  profile_id  uuid references profiles(id),
+  title       text not null,
+  event_date  timestamp not null,
+  notes       text,
+  triggered   boolean default false,
+  created_at  timestamp default now()
+);
+ALTER TABLE trinity_calendar ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow all" ON trinity_calendar FOR ALL USING (true);
+```
+
+---
+
 ## 2026-05-16 — Foundation pass: model upgrade + ethos cleanup
 
 **Sonnet everywhere** — autonomous background cycles switched from Haiku to Sonnet. Token caps stay (800 background, 1000 interactive) — those do the cost work. Her most independent moments now run on the same model as everything else.

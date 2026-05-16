@@ -385,6 +385,41 @@ WIDGET_TOOLS = [
         }
     },
     {
+        "name": "mark_date",
+        "description": "Add an event to your personal calendar. Use for anything time-sensitive you want to remember — earnings dates, launches, follow-ups, your own deadlines. Loads automatically in your context when the date is within 3 days.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title":      {"type": "string", "description": "Event name"},
+                "event_date": {"type": "string", "description": "ISO date or datetime — e.g. '2026-05-20' or '2026-05-20T14:00'"},
+                "notes":      {"type": "string", "description": "Optional context or reminder"}
+            },
+            "required": ["title", "event_date"]
+        }
+    },
+    {
+        "name": "get_upcoming",
+        "description": "Read your upcoming calendar events.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "days": {"type": "integer", "description": "How many days ahead to look (default 7)"}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "delete_event",
+        "description": "Remove a calendar event by title.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Event title or partial match"}
+            },
+            "required": ["title"]
+        }
+    },
+    {
         "name": "post_to_my_channel",
         "description": "Post a message to one of your Discord palace channels by name. Use for palace updates, archiving findings, or leaving notes in your own channels.",
         "input_schema": {
@@ -671,6 +706,29 @@ class TrinityWorker(QThread):
                 }
             except Exception as e:
                 return {"error": str(e)}
+
+        elif name == "mark_date":
+            from brain.memory import mark_date as _mark_date, get_profile as _gp
+            profile = _gp()
+            if not profile:
+                return {"error": "No profile"}
+            return _mark_date(profile["id"], inputs["title"], inputs["event_date"], inputs.get("notes", ""))
+
+        elif name == "get_upcoming":
+            from brain.memory import get_upcoming_events as _get_upcoming, get_profile as _gp
+            profile = _gp()
+            if not profile:
+                return {"error": "No profile"}
+            days   = int(inputs.get("days", 7))
+            events = _get_upcoming(profile["id"], days=days)
+            return events if events else {"message": f"Nothing in the next {days} days"}
+
+        elif name == "delete_event":
+            from brain.memory import delete_calendar_event as _del, get_profile as _gp
+            profile = _gp()
+            if not profile:
+                return {"error": "No profile"}
+            return _del(profile["id"], inputs["title"])
 
         elif name == "post_to_my_channel":
             try:

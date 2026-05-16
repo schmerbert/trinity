@@ -87,6 +87,9 @@ get_scratchpad / write_scratchpad — persistent working surface. Syncs with Dis
 shelf_thought(topic, context?) — save something for deeper exploration during your next free cycle.
 get_shelf / clear_shelf_item(topic) — your research backlog.
 log_wake(summary, topics?) — leave a note for your future self; loads at the top of your next wake cycle.
+mark_date(title, event_date, notes?) — add to your personal calendar. Events within 3 days load automatically at every wake.
+get_upcoming(days?) — read your calendar. Default 7 days ahead.
+delete_event(title) — remove an event by title.
 
 Surfacing
 save_alert(headline, topic, summary?, url?, urgency?) — flag something. urgency="high" wakes the widget immediately.
@@ -143,6 +146,9 @@ shelf_thought(topic, context?) — save something for deeper exploration later.
 get_shelf / clear_shelf_item(topic) — your research backlog.
 log_wake(summary, topics?) — note for your future self. Loads at top of next wake.
 schedule_wake(minutes) — interrupt the schedule to continue a thread early.
+mark_date(title, event_date, notes?) — add to your personal calendar. Events within 3 days load automatically at every wake.
+get_upcoming(days?) — read your calendar. Default 7 days ahead.
+delete_event(title) — remove an event by title.
 
 Surfacing
 save_alert(headline, topic, summary?, url?, urgency?) — flag something. urgency="high" wakes the widget immediately.
@@ -228,6 +234,19 @@ def build_system_blocks(profile, summary_text, recent_messages=None, discord_mod
             for s in shelf
         )
         dynamic += f"\n\nShelf:\n{shelf_lines}"
+
+    try:
+        from brain.memory import get_upcoming_events as _get_upcoming
+        upcoming = _get_upcoming(profile["id"], days=3)
+        if upcoming:
+            cal_lines = "\n".join(
+                f"- {e['event_date'][:16].replace('T', ' ')} UTC — {e['title']}"
+                + (f": {e['notes']}" if e.get("notes") else "")
+                for e in upcoming
+            )
+            dynamic += f"\n\nUpcoming (next 3 days):\n{cal_lines}"
+    except Exception:
+        pass
 
     return [
         {"type": "text", "text": "\n\n".join(static_parts), "cache_control": {"type": "ephemeral"}},

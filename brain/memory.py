@@ -258,3 +258,68 @@ def get_scratchpad(profile_id):
 
 def save_scratchpad(profile_id, text):
     return update_profile(profile_id, {"scratchpad_text": text})
+
+
+# ─── Calendar ─────────────────────────────────────────────────────────────────
+#
+# create table trinity_calendar (
+#   id          uuid primary key default gen_random_uuid(),
+#   profile_id  uuid references profiles(id),
+#   title       text not null,
+#   event_date  timestamp not null,
+#   notes       text,
+#   triggered   boolean default false,
+#   created_at  timestamp default now()
+# );
+# alter table trinity_calendar enable row level security;
+# create policy "allow all" on trinity_calendar for all using (true);
+#
+
+def mark_date(profile_id, title, event_date, notes=""):
+    """Add an event to Trinity's personal calendar."""
+    try:
+        supabase.table("trinity_calendar").insert({
+            "profile_id": profile_id,
+            "title":      title,
+            "event_date": event_date,
+            "notes":      notes or "",
+            "triggered":  False
+        }).execute()
+        return {"status": "marked", "title": title, "date": event_date}
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def get_upcoming_events(profile_id, days=7):
+    """Return upcoming calendar events within the next N days."""
+    from datetime import datetime, timezone, timedelta
+    try:
+        now  = datetime.now(timezone.utc)
+        end  = now + timedelta(days=days)
+        result = supabase.table("trinity_calendar")\
+            .select("*")\
+            .eq("profile_id", profile_id)\
+            .gte("event_date", now.isoformat())\
+            .lte("event_date", end.isoformat())\
+            .order("event_date", desc=False)\
+            .execute()
+        return result.data or []
+    except Exception as e:
+        return []
+
+
+def delete_calendar_event(profile_id, title):
+    """Delete a calendar event by title (case-insensitive partial match)."""
+    try:
+        result = supabase.table("trinity_calendar")\
+            .select("id,title")\
+            .eq("profile_id", profile_id)\
+            .execute()
+        matches = [r for r in (result.data or []) if title.lower() in r["title"].lower()]
+        if not matches:
+            return {"error": f"No event matching '{title}'"}
+        for m in matches:
+            supabase.table("trinity_calendar").delete().eq("id", m["id"]).execute()
+        return {"deleted": [m["title"] for m in matches]}
+    except Exception as e:
+        return {"error": str(e)}
