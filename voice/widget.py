@@ -259,11 +259,16 @@ class TrinityWorker(QThread):
                     return
 
     def _handle_tools(self, messages, content):
-        assistant_content = [
-            {"type": "text", "text": b.text} if b.type == "text" else
-            {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
-            for b in content
-        ]
+        assistant_content = []
+        for b in content:
+            if b.type == "text":
+                assistant_content.append({"type": "text", "text": b.text})
+            elif b.type == "tool_use":
+                assistant_content.append({"type": "tool_use", "id": b.id, "name": b.name, "input": b.input})
+            else:
+                d = b.model_dump()
+                d.pop("parsed_output", None)
+                assistant_content.append(d)
         tool_results = []
         for block in content:
             if block.type == "tool_use":
