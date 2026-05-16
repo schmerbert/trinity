@@ -1008,9 +1008,8 @@ async def _call_trinity_inner(prompt: str, messages: list, profile_id: str, retr
 
         if response.stop_reason == "tool_use":
             assistant_content = [
-                b.model_dump() if hasattr(b, "model_dump")
-                else ({"type": "text", "text": b.text} if b.type == "text"
-                      else {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input})
+                {"type": "text", "text": b.text} if b.type == "text"
+                else {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
                 for b in response.content
             ]
             messages = messages + [{"role": "assistant", "content": assistant_content}]

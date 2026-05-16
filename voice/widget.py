@@ -260,7 +260,6 @@ class TrinityWorker(QThread):
 
     def _handle_tools(self, messages, content):
         assistant_content = [
-            b.model_dump() if hasattr(b, "model_dump") else
             {"type": "text", "text": b.text} if b.type == "text" else
             {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
             for b in content
