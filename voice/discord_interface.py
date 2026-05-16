@@ -314,6 +314,7 @@ async def on_ready():
     log.info(f"Autonomous loop every {AUTONOMOUS_MINUTES} min | Eyes every 2 min | Thought drain every 30s")
     eyes_monitor.start()
     thought_drain.start()
+    asyncio.create_task(_startup_brief())
 
 
 @bot.event
@@ -798,6 +799,26 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         return {"status": "logged", "category": category}
 
     return {"error": f"Unknown tool: {name}"}
+
+# ─── Startup brief — one-shot orientation on boot ────────────────────────────
+
+async def _startup_brief():
+    await asyncio.sleep(3)
+    profile = get_profile()
+    if not profile:
+        return
+    summaries    = get_recent_summaries(profile["id"])
+    summary_text = json.dumps(summaries, indent=2) if summaries else "No previous conversations yet."
+    prompt       = build_prompt(profile, summary_text, [], discord_mode=True)
+    context      = "You just came online. Quick orientation — check anything you want, get your bearings. No need to log this one."
+    if _api_lock.locked():
+        return
+    try:
+        await _call_trinity(prompt, [{"role": "user", "content": context}], profile["id"], retry=False, background=True)
+        log.info("Startup brief complete")
+    except Exception as e:
+        log.error(f"Startup brief: {e}")
+
 
 # ─── Autonomous loop ─────────────────────────────────────────────────────────
 
