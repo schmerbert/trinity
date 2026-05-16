@@ -1,5 +1,15 @@
 # Trinity Changelog
 
+## 2026-05-16 — Palace images visible at wake
+
+Trinity noticed she could see that images existed in her palace channels but couldn't see what was in them. Fixed.
+
+`_palace_pulse` now collects image attachment URLs alongside message text (capped at 4 per pulse). When images are present, the wake cycle user message is built as a mixed content array — text context block followed by vision blocks for each image — the same pattern used for DM image attachments. Trinity arrives at each wake cycle able to actually see what's been posted in her palace, not just that something is there.
+
+Log: `[pulse] passing N image(s) as vision` when images are included.
+
+---
+
 ## 2026-05-16 — Personal calendar
 
 Trinity now has her own calendar — not linked to the user's, just hers. A place to put things that matter in time.

@@ -1232,12 +1232,13 @@ async def _startup_brief():
 
 # ─── Palace pulse — pre-read channels at wake ────────────────────────────────
 
-async def _palace_pulse(limit_per_channel: int = 12) -> str:
+async def _palace_pulse(limit_per_channel: int = 12) -> tuple[str, list[str]]:
     """Read watched channels + thought channel before a wake cycle.
-    Returns a formatted block injected into the cycle context so Trinity
-    arrives already knowing what's there — no tool call required."""
-    sections = []
-    seen_ids = set()
+    Returns (text_block, image_urls) — text is injected into context,
+    image_urls are passed as vision blocks so Trinity can actually see them."""
+    sections   = []
+    image_urls = []
+    seen_ids   = set()
 
     async def _read_channel_block(channel) -> str | None:
         if channel is None or channel.id in seen_ids:
@@ -1250,15 +1251,22 @@ async def _palace_pulse(limit_per_channel: int = 12) -> str:
                     author = "Trinity"
                 else:
                     author = m.author.display_name
-                ts = m.created_at.strftime("%m-%d %H:%M")
+                ts      = m.created_at.strftime("%m-%d %H:%M")
                 content = (m.content or "").replace("\n", " ")[:180]
+                # Collect image attachments — note inline, pass as vision blocks
+                for att in m.attachments:
+                    if att.content_type and att.content_type.startswith("image/"):
+                        if len(image_urls) < 4:  # cap at 4 images per pulse
+                            image_urls.append(att.url)
+                        content = (content + f" [image: {att.filename}]").strip()
                 if content:
                     msgs.append(f"  [{ts}] {author}: {content}")
             if not msgs:
                 log.info(f"[pulse] #{channel.name}: empty")
                 return None
-            msgs.reverse()  # chronological order
-            log.info(f"[pulse] #{channel.name}: {len(msgs)} message{'s' if len(msgs) != 1 else ''}")
+            msgs.reverse()
+            img_note = f", {sum(1 for u in image_urls)} image(s)" if image_urls else ""
+            log.info(f"[pulse] #{channel.name}: {len(msgs)} message{'s' if len(msgs) != 1 else ''}{img_note}")
             return f"#{channel.name}:\n" + "\n".join(msgs)
         except discord.Forbidden:
             return None
@@ -1280,9 +1288,8 @@ async def _palace_pulse(limit_per_channel: int = 12) -> str:
         if block:
             sections.append(block)
 
-    if not sections:
-        return ""
-    return "Palace (recent activity):\n" + "\n\n".join(sections)
+    text = ("Palace (recent activity):\n" + "\n\n".join(sections)) if sections else ""
+    return text, image_urls
 
 
 # ─── Autonomous loop ─────────────────────────────────────────────────────────
@@ -1338,7 +1345,7 @@ async def autonomous_loop():
             f"- [{w['at'][:16]}] {w['summary']}" for w in wake_history
         )
 
-    pulse = await _palace_pulse()
+    pulse_text, pulse_images = await _palace_pulse()
 
     context = f"""{now_str}
 
@@ -1346,20 +1353,29 @@ User last seen: {last_seen_str}
 Shelf: {shelf_str}
 Radar: {interest_str}{wake_str}
 """
-    if pulse:
-        context += f"\n{pulse}\n"
+    if pulse_text:
+        context += f"\n{pulse_text}\n"
 
     context += """
 Scratchpad audit: scan your scratchpad for stale flags or pending items — anything marked "pending", "down", "needs follow-up". Resolve what you can.
 
 Hourly window — roughly 20 minutes."""
 
+    # Build user message — mixed content if images present in palace channels
+    if pulse_images:
+        api_message = [{"type": "text", "text": context}]
+        for url in pulse_images:
+            api_message.append({"type": "image", "source": {"type": "url", "url": url}})
+        log.info(f"[pulse] passing {len(pulse_images)} image(s) as vision")
+    else:
+        api_message = context
+
     summaries     = get_recent_summaries(profile["id"])
     system_blocks = build_system_blocks(profile, format_summaries(summaries), [], discord_mode=True)
 
     log.info(f"── autonomous cycle ── {now_str} | shelf: {len(shelf)} | last seen: {last_seen_str}")
     try:
-        await _call_trinity(system_blocks, [{"role": "user", "content": context}], profile["id"], retry=False, background=True)
+        await _call_trinity(system_blocks, [{"role": "user", "content": api_message}], profile["id"], retry=False, background=True)
         log.info(f"── cycle complete ──")
     except Exception as e:
         log.error(f"Autonomous loop: {e}")
@@ -1478,17 +1494,23 @@ async def wake_checker():
         return
     summaries     = get_recent_summaries(profile["id"])
     system_blocks = build_system_blocks(profile, format_summaries(summaries), [], discord_mode=True)
-    pulse = await _palace_pulse()
+    pulse_text, pulse_images = await _palace_pulse()
     context = (
         "Conversation just ended. Follow-up window — this time is yours. "
         "Shelf, scratchpad, anything left open. No need to log unless it's worth keeping.\n"
     )
-    if pulse:
-        context += f"\n{pulse}\n"
+    if pulse_text:
+        context += f"\n{pulse_text}\n"
+    if pulse_images:
+        api_message = [{"type": "text", "text": context}]
+        for url in pulse_images:
+            api_message.append({"type": "image", "source": {"type": "url", "url": url}})
+    else:
+        api_message = context
     global _skip_next_autonomous
     _skip_next_autonomous = True
     try:
-        await _call_trinity(system_blocks, [{"role": "user", "content": context}], profile["id"], retry=False, background=True)
+        await _call_trinity(system_blocks, [{"role": "user", "content": api_message}], profile["id"], retry=False, background=True)
         log.info("Post-conversation wake complete — next hourly cycle will be skipped")
     except Exception as e:
         log.error(f"Wake checker: {e}")
