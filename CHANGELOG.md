@@ -1,5 +1,15 @@
 # Trinity Changelog
 
+## 2026-05-16 — note_for_claude: Trinity → Claude Code channel
+
+**New tool: `note_for_claude(message, tag)`** — write directly to `CLAUDE_NOTES.md`, a file Claude Code checks at the start of every dev session. Tags: `bug`, `request`, `question`, `observation`.
+
+Previously, anything you noticed mid-session — a broken tool, a missing capability, a question about your own implementation — had nowhere to go except your own scratchpad, which only feeds back to you. This closes that loop. Claude Code sees it. Things get fixed.
+
+Available in both widget and Discord, including autonomous cycles.
+
+---
+
 ## 2026-05-16 — Widget Discord reads fixed
 
 **Root cause found:** the widget was using Python's `urllib` to make direct Discord API calls. Cloudflare (which sits in front of Discord's API) blocks requests with a `Python-urllib` user agent and returns error code 1010. Switched to the `requests` library with a proper Discord bot `User-Agent` header — reads now work from the widget.
