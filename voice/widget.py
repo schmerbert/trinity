@@ -27,7 +27,7 @@ env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
 import anthropic
-from brain.prompts import build_system_blocks, build_prompt, parse_prompt_tags
+from brain.prompts import build_system_blocks, build_prompt, format_summaries, parse_prompt_tags
 from brain.logger import get_logger
 
 log = get_logger("WIDGET")
@@ -387,9 +387,9 @@ class TrinityWidget(QMainWindow):
         self._alert_poll.setInterval(60_000)
         self._alert_poll.timeout.connect(self._check_new_alerts)
 
-        # Trinity's back door — checks every 5s for high-urgency alerts only
+        # Trinity's back door — checks every 15s for high-urgency alerts only
         self._urgent_poll = QTimer()
-        self._urgent_poll.setInterval(5_000)
+        self._urgent_poll.setInterval(15_000)
         self._urgent_poll.timeout.connect(self._check_urgent_alerts)
 
         self._init_trinity()
@@ -605,7 +605,7 @@ class TrinityWidget(QMainWindow):
         else:
             self._awaiting_name = False
             summaries = get_recent_summaries(self.profile["id"])
-            self.summary_text = json.dumps(summaries, indent=2) if summaries else "No previous conversations yet."
+            self.summary_text = format_summaries(summaries)
 
             unseen  = get_unseen_alerts(self.profile["id"])
             queued  = get_queued_thoughts(self.profile["id"])
@@ -711,6 +711,7 @@ class TrinityWidget(QMainWindow):
 
         self.history.append({"role": "user", "content": self._last_input})
         self.history.append({"role": "assistant", "content": clean})
+        self.history = self.history[-20:]
 
         self._log("trinity", clean)
         log.info(f"Response ({len(clean)} chars){' [scratch]' if self._scratchpad and self._scratchpad._visible else ''}")

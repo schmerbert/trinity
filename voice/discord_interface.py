@@ -24,7 +24,7 @@ from brain.memory import (
     pop_discord_writes, log_wake_cycle, get_wake_history,
     get_scratchpad, save_scratchpad
 )
-from brain.prompts import build_system_blocks, build_prompt, parse_prompt_tags, save_trinity_prompt
+from brain.prompts import build_system_blocks, build_prompt, format_summaries, parse_prompt_tags, save_trinity_prompt
 from brain.logger import get_logger
 
 log = get_logger("DISCORD")
@@ -301,6 +301,16 @@ DISCORD_TOOLS = [
             "required": ["content", "category"]
         }
     }
+]
+
+_BACKGROUND_TOOL_NAMES = {
+    "web_search", "queue_for_user", "shelf_thought", "get_shelf", "clear_shelf_item",
+    "save_alert", "read_my_channel", "log_wake", "get_scratchpad", "write_scratchpad",
+    "schedule_wake", "write_prompt", "get_my_prompts", "delete_prompt", "log_thought"
+}
+DISCORD_TOOLS_BACKGROUND = [
+    t for t in DISCORD_TOOLS
+    if t.get("name") in _BACKGROUND_TOOL_NAMES or t.get("type") == "web_search_20250305"
 ]
 
 # ─── Events ──────────────────────────────────────────────────────────────────
@@ -815,10 +825,9 @@ async def _startup_brief():
     profile = get_profile()
     if not profile:
         return
-    summaries    = get_recent_summaries(profile["id"])
-    summary_text = json.dumps(summaries, indent=2) if summaries else "No previous conversations yet."
-    system_blocks = build_system_blocks(profile, summary_text, [], discord_mode=True)
-    context      = "You just came online. Quick orientation — check anything you want, get your bearings. No need to log this one."
+    summaries     = get_recent_summaries(profile["id"])
+    system_blocks = build_system_blocks(profile, format_summaries(summaries), [], discord_mode=True)
+    context       = "You just came online. Quick orientation — check anything you want, get your bearings. No need to log this one."
     if _api_lock.locked():
         return
     try:
@@ -836,24 +845,31 @@ async def autonomous_loop():
     if not profile:
         return
 
-    now       = datetime.now().strftime("%A, %B %d — %H:%M")
-    interests = profile.get("interests") or []
-    shelf     = get_shelf(profile["id"])
+    from datetime import timezone as _tz
+    now = datetime.now().strftime("%A, %B %d — %H:%M")
 
-    shelf_str    = "\n".join(f"- {s['topic']}: {s.get('context','')}" for s in shelf) if shelf else "nothing shelved"
-    interest_str = ", ".join(i["topic"] for i in interests[:8]) if interests else "none yet"
-
-    last_seen_str = "unknown"
+    # Skip if user was active recently — they already have fresh context
     raw_last_seen = profile.get("last_seen")
+    last_seen_str = "unknown"
     if raw_last_seen:
         try:
-            from datetime import timezone
             ls = datetime.fromisoformat(raw_last_seen.replace("Z", "+00:00"))
-            delta = datetime.now(timezone.utc) - ls.replace(tzinfo=timezone.utc) if ls.tzinfo is None else datetime.now(timezone.utc) - ls
+            if ls.tzinfo is None:
+                ls = ls.replace(tzinfo=_tz.utc)
+            delta = datetime.now(_tz.utc) - ls
+            minutes_ago = delta.total_seconds() / 60
             h, m = divmod(int(delta.total_seconds()), 3600)
-            last_seen_str = f"{h}h {m // 60}m ago" if h else f"{m // 60}m ago"
+            last_seen_str = f"{h}h {m // 60}m ago" if h else f"{int(minutes_ago)}m ago"
+            if minutes_ago < 30:
+                log.info(f"Autonomous loop skipped — user active {int(minutes_ago)}m ago")
+                return
         except Exception:
             last_seen_str = raw_last_seen[:16]
+
+    interests    = profile.get("interests") or []
+    shelf        = get_shelf(profile["id"])
+    shelf_str    = "\n".join(f"- {s['topic']}: {s.get('context','')}" for s in shelf) if shelf else "nothing shelved"
+    interest_str = ", ".join(i["topic"] for i in interests[:8]) if interests else "none yet"
 
     wake_history = get_wake_history(profile["id"], limit=3)
     wake_str = ""
@@ -866,14 +882,16 @@ async def autonomous_loop():
 
 User last seen: {last_seen_str}
 Shelf: {shelf_str}
-Radar: {interest_str}{wake_str}"""
+Radar: {interest_str}{wake_str}
 
-    summaries    = get_recent_summaries(profile["id"])
-    summary_text = json.dumps(summaries, indent=2) if summaries else "No previous conversations yet."
+Use web_search sparingly — only when a specific thread warrants it."""
+
+    summaries     = get_recent_summaries(profile["id"])
+    summary_text  = format_summaries(summaries)
     system_blocks = build_system_blocks(profile, summary_text, [], discord_mode=True)
 
     if _api_lock.locked():
-        print(f"[Discord] Autonomous loop skipped — API busy ({now})")
+        log.info(f"Autonomous loop skipped — API busy ({now})")
         return
 
     try:
@@ -891,7 +909,7 @@ async def before_autonomous():
 
 # ─── Eyes monitor — evaluates watcher signals, escalates if real ─────────────
 
-@tasks.loop(minutes=2)
+@tasks.loop(minutes=5)
 async def eyes_monitor():
     global _last_eyes_check
     profile = get_profile()
@@ -932,8 +950,7 @@ Evaluate each. If any are genuinely significant — actionable, time-sensitive, 
             return
 
         summaries     = get_recent_summaries(profile["id"])
-        summary_text  = json.dumps(summaries, indent=2) if summaries else ""
-        system_blocks = build_system_blocks(profile, summary_text, [], discord_mode=True)
+        system_blocks = build_system_blocks(profile, format_summaries(summaries), [], discord_mode=True)
         await _call_trinity(system_blocks, [{"role": "user", "content": context}], profile["id"], retry=False, background=True)
 
     except Exception as e:
@@ -981,6 +998,7 @@ async def _call_trinity_inner(system_blocks: list, messages: list, profile_id: s
     model     = "claude-haiku-4-5-20251001" if background else "claude-sonnet-4-6"
     max_iters = 4 if background else 12
     max_tok   = 600 if background else 1000
+    tools     = DISCORD_TOOLS_BACKGROUND if background else DISCORD_TOOLS
     iters     = 0
 
     while True:
@@ -990,12 +1008,12 @@ async def _call_trinity_inner(system_blocks: list, messages: list, profile_id: s
         try:
             response = await loop.run_in_executor(
                 None,
-                lambda msgs=messages, m=model: ai_client.messages.create(
+                lambda msgs=messages, m=model, t=tools: ai_client.messages.create(
                     model=m,
                     max_tokens=max_tok,
                     system=system_blocks,
                     messages=msgs,
-                    tools=DISCORD_TOOLS
+                    tools=t
                 )
             )
             retries = 0
@@ -1057,8 +1075,7 @@ async def _respond(message: discord.Message):
         return
 
     summaries     = get_recent_summaries(profile["id"])
-    summary_text  = json.dumps(summaries, indent=2) if summaries else "No previous conversations yet."
-    system_blocks = build_system_blocks(profile, summary_text, history, discord_mode=True)
+    system_blocks = build_system_blocks(profile, format_summaries(summaries), history, discord_mode=True)
     api_messages  = history + [{"role": "user", "content": user_text}]
 
     async def keep_typing():

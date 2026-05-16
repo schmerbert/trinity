@@ -120,6 +120,24 @@ Use your tools proactively. When someone messages you, feel free to search, chec
 """
 
 
+def format_summaries(summaries):
+    if not summaries:
+        return "No previous conversations."
+    lines = []
+    for s in summaries:
+        date    = (s.get("created_at") or "")[:10]
+        themes  = ", ".join(s.get("themes") or [])
+        threads = "; ".join(s.get("open_threads") or [])
+        new_t   = s.get("new_thinking") or ""
+        line    = f"[{date}] {themes}"
+        if new_t:
+            line += f" | {new_t}"
+        if threads:
+            line += f" | open: {threads}"
+        lines.append(line)
+    return "\n".join(lines)
+
+
 def build_system_blocks(profile, summary_text, recent_messages=None, discord_mode=False, extensions=None):
     """Returns [static_cached_block, dynamic_uncached_block] for the API system parameter."""
     static_parts = [TRINITY_BASE]
