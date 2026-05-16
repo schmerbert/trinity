@@ -1150,11 +1150,11 @@ class TrinityWidget(QMainWindow):
 
                 cache_dir   = Path.home() / ".cache" / "kokoro"
                 cache_dir.mkdir(parents=True, exist_ok=True)
-                model_path  = cache_dir / "kokoro-v0_19.onnx"
+                model_path  = cache_dir / "kokoro-v1.0.int8.onnx"
                 voices_path = cache_dir / "voices-v1.0.bin"
-                base_url    = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1"
+                base_url    = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0"
 
-                for fname, path in [("kokoro-v0_19.onnx", model_path), ("voices-v1.0.bin", voices_path)]:
+                for fname, path in [("kokoro-v1.0.int8.onnx", model_path), ("voices-v1.0.bin", voices_path)]:
                     if not path.exists():
                         log.info(f"Downloading TTS model: {fname} (one-time)...")
                         urllib.request.urlretrieve(f"{base_url}/{fname}", path)
