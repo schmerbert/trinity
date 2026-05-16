@@ -602,21 +602,23 @@ class TrinityWorker(QThread):
 
     def _read_discord_channel(self, name_query, limit=20):
         try:
-            import urllib.request, urllib.error
+            import requests as _req
             from brain.memory import get_profile as _gp
             profile   = _gp()
             guild_id  = (profile.get("discord_home_guild_id") if profile else None) or os.getenv("DISCORD_HOME_GUILD_ID")
             bot_token = os.getenv("DISCORD_BOT_TOKEN")
             if not guild_id or not bot_token:
                 return {"error": "Discord not configured — set home server first"}
-            headers = {"Authorization": f"Bot {bot_token}"}
+            headers = {
+                "Authorization": f"Bot {bot_token}",
+                "User-Agent": "DiscordBot (https://github.com/schmerbert/trinity, 1.0)"
+            }
 
-            req = urllib.request.Request(
-                f"https://discord.com/api/v10/guilds/{guild_id}/channels",
-                headers=headers
-            )
-            with urllib.request.urlopen(req) as resp:
-                channels = json.loads(resp.read())
+            r = _req.get(f"https://discord.com/api/v10/guilds/{guild_id}/channels", headers=headers, timeout=10)
+            if not r.ok:
+                log.error(f"read_discord_channel guilds/{guild_id}/channels HTTP {r.status_code}: {r.text[:200]}")
+                return {"error": f"HTTP {r.status_code}: {r.text[:200]}"}
+            channels = r.json()
 
             query   = name_query.lower().replace("-", "").replace("_", "").replace(" ", "")
             channel = next(
@@ -628,12 +630,14 @@ class TrinityWorker(QThread):
             if not channel:
                 return {"error": f"No channel matching '{name_query}' found"}
 
-            req = urllib.request.Request(
+            r = _req.get(
                 f"https://discord.com/api/v10/channels/{channel['id']}/messages?limit={min(limit,50)}",
-                headers=headers
+                headers=headers, timeout=10
             )
-            with urllib.request.urlopen(req) as resp:
-                msgs = json.loads(resp.read())
+            if not r.ok:
+                log.error(f"read_discord_channel messages HTTP {r.status_code}: {r.text[:200]}")
+                return {"error": f"HTTP {r.status_code}: {r.text[:200]}"}
+            msgs = r.json()
 
             result = []
             for m in msgs:
@@ -645,10 +649,6 @@ class TrinityWorker(QThread):
                     ]
                 result.append(entry)
             return result
-        except urllib.error.HTTPError as e:
-            body = e.read().decode("utf-8", errors="ignore")
-            log.error(f"read_discord_channel HTTP {e.code}: {body[:200]}")
-            return {"error": f"HTTP {e.code}: {body[:200]}"}
         except Exception as e:
             log.error(f"read_discord_channel error: {e}")
             return {"error": str(e)}
