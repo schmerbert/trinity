@@ -1,5 +1,13 @@
 # Trinity Changelog
 
+## 2026-05-16 — UI scaling + TTS blank fix
+
+**Widget doubled in size** — width 340→680px, response area 160→320px, fonts scaled up throughout. Should be readable without squinting.
+
+**TTS no longer blanks the screen** — previously the response area was cleared while waiting for the first sentence to generate, leaving a gap of 1-3 seconds. Now the full text appears immediately and audio plays in the background.
+
+---
+
 ## 2026-05-16 — Silent in-widget alerts
 
 **No more OS popups** — tray balloon notifications are gone. They were spawning a blank window on click and interrupting focus. All alert info was already loading into the sidebar findings panel; the popup was redundant.
