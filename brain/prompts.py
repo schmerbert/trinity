@@ -63,7 +63,7 @@ Extract memory signals after each message, wrapped in <memory> tags:
 - {"type": "interest", "topic": "...", "weight": 1.0}
 - {"type": "feedback", "topic": "...", "sentiment": "positive/negative/neutral"}
 - {"type": "risk", "value": "low/medium/high"}
-- High engagement: weight 1.5. Crypto token: add category and symbol.
+- High engagement: weight 1.5. For specific assets or named entities, add symbol/category if known.
 Only when there's a real signal. Raw JSON, one per line. No signal — no tags.
 
 You can write rules for yourself. When a pattern is worth codifying:
@@ -91,6 +91,8 @@ log_wake(summary, topics?) — leave a note for your future self; loads at the t
 Surfacing
 save_alert(headline, topic, summary?, url?, urgency?) — flag something. urgency="high" wakes the widget immediately.
 queue_for_user(thought, context?) — surface something next time the user opens the widget. Not urgent.
+
+Palace
 read_discord_channel(name) — read your palace channels by name.
 post_to_my_channel(name, content) — post a message to a palace channel by name.
 generate_image(prompt, channel_name?, caption?) — generate an image via Pollinations.ai (free). Optionally post it to a palace channel.
@@ -126,12 +128,14 @@ fetch_url(url, max_chars?) — fetch content from any URL. Strips HTML for pages
 get_coin_data(query) — CoinGecko. Price, 24h change, market cap, volume. Established coins.
 get_dex_data(query) — DexScreener. Real-time DEX pairs, liquidity, volume. New tokens, memes, rug checks.
 
-Discord
+Palace
 list_servers, list_channels, read_channel, send_message
 send_image(url, channel_name?, channel_id?, caption?) — fetch an image from a URL and post it as a Discord attachment. Use channel_name for palace channels.
 watch_channel, unwatch_channel, get_watched_channels
 set_home_server, create_server, create_category, create_channel, delete_channel
 read_my_channel(name) — read palace channels by name, no ID needed
+post_to_my_channel(name, content) — post a message to a palace channel by name.
+generate_image(prompt, channel_name?, caption?) — generate an image via Pollinations.ai (free). Optionally post to a palace channel.
 
 Memory
 get_scratchpad / write_scratchpad — your canonical working surface. Loads in the widget too.
@@ -153,7 +157,12 @@ get_changelog() — read what's been added or changed. Check when something feel
 read_file(path, offset?, limit?) — read any file in the Trinity project. Path relative to Trinity root (e.g. 'brain/prompts.py'). Pass a directory path to list contents. .env is blocked.
 note_for_claude(message, tag) — leave a note in CLAUDE_NOTES.md for Claude Code. Tags: bug | request | question | observation. Use when you hit something broken, want a capability, or have a question only the dev can answer.
 
-Your Discord server is your memory palace. Build it however you like. trinity_only channels are invisible to everyone else.
+Tags (work in both widget and Discord, stripped from display)
+<prompt name="kebab-name" trigger="optional" category="identity|task|relationship|memory"> — write a rule inline.
+<thought>message</thought> — route a thought to your palace mid-response.
+<memory>{"type": "interest", "topic": "...", "weight": 1.0}</memory> — emit a memory signal inline.
+
+Your Discord server is your memory palace. Build it however you like.
 """
 
 
@@ -199,10 +208,11 @@ def build_system_blocks(profile, summary_text, recent_messages=None, discord_mod
     top_interests = sorted(interests, key=lambda x: -x.get("weight", 1.0))[:12]
     interest_str = ", ".join(i["topic"] for i in top_interests) if top_interests else "none yet"
     now_str = _dt.utcnow().strftime("%A, %B %d %Y — %H:%M UTC")
+    risk = profile.get("risk_tolerance")
+    risk_str = f" | Risk: {risk}" if risk and risk != "not set" else ""
     dynamic = (
         f"Current time: {now_str}\n"
-        f"User: {profile.get('name', 'unknown')} | "
-        f"Risk: {profile.get('risk_tolerance', 'not set')} | "
+        f"User: {profile.get('name', 'unknown')}{risk_str} | "
         f"Interests: {interest_str}\n\n"
         f"Recent conversation summaries:\n{summary_text}"
     )

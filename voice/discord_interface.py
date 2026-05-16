@@ -1287,9 +1287,9 @@ Radar: {interest_str}{wake_str}
         context += f"\n{pulse}\n"
 
     context += """
-Scratchpad audit: scan your scratchpad for stale flags or pending items — anything marked "pending", "down", "needs follow-up". Resolve autonomously where you can.
+Scratchpad audit: scan your scratchpad for stale flags or pending items — anything marked "pending", "down", "needs follow-up". Resolve what you can.
 
-Hourly window — roughly 20 minutes. Use web_search sparingly."""
+Hourly window — roughly 20 minutes."""
 
     summaries     = get_recent_summaries(profile["id"])
     system_blocks = build_system_blocks(profile, format_summaries(summaries), [], discord_mode=True)
@@ -1417,9 +1417,8 @@ async def wake_checker():
     system_blocks = build_system_blocks(profile, format_summaries(summaries), [], discord_mode=True)
     pulse = await _palace_pulse()
     context = (
-        "You just finished a conversation. This is your follow-up window — "
-        "check your shelf, write a rule if something clicked, explore anything worth pursuing. "
-        "Scan your scratchpad for stale flags and resolve what you can.\n"
+        "Conversation just ended. Follow-up window — this time is yours. "
+        "Shelf, scratchpad, anything left open. No need to log unless it's worth keeping.\n"
     )
     if pulse:
         context += f"\n{pulse}\n"
@@ -1470,9 +1469,9 @@ def _fmt_tool_call(name: str, inputs: dict) -> str:
 async def _call_trinity_inner(system_blocks: list, messages: list, profile_id: str, retry: bool = True, background: bool = False) -> str:
     loop = asyncio.get_event_loop()
     retries    = 0
-    model      = "claude-haiku-4-5-20251001" if background else "claude-sonnet-4-6"
+    model      = "claude-sonnet-4-6"
     max_iters  = 4 if background else 12
-    max_tok    = 600 if background else 1000
+    max_tok    = 800 if background else 1000
     tools      = DISCORD_TOOLS_BACKGROUND if background else DISCORD_TOOLS
     iters      = 0
     tool_count = 0

@@ -1,5 +1,21 @@
 # Trinity Changelog
 
+## 2026-05-16 — Foundation pass: model upgrade + ethos cleanup
+
+**Sonnet everywhere** — autonomous background cycles switched from Haiku to Sonnet. Token caps stay (800 background, 1000 interactive) — those do the cost work. Her most independent moments now run on the same model as everything else.
+
+**Memory signals generalized** — removed the crypto-specific instruction from TRINITY_BASE ("Crypto token: add category and symbol"). Now: "For specific assets or named entities, add symbol/category if known." The memory system works for any domain.
+
+**Wake cycle language** — removed "Use web_search sparingly" (cost concern dressed as guidance) and lightened the post-conversation wake prompt. It was a task list. Now it's just: "this time is yours."
+
+**Tool grouping fixed** — Discord/palace tools moved from "Surfacing" into their own "Palace" section in both WIDGET_CAPABILITIES and DISCORD_CONTEXT. Surfacing is now only save_alert and queue_for_user.
+
+**Discord tag documentation added** — `<prompt>`, `<thought>`, and `<memory>` tags now documented in DISCORD_CONTEXT. They work in Discord (parser runs on all responses) but were undocumented there.
+
+**Risk field cleaned up** — "Risk: not set" no longer appears in the dynamic context block. Only shows when actually set.
+
+---
+
 ## 2026-05-16 — Observability: full activity logging
 
 Every meaningful action Trinity takes is now visible in the log. Watching the log file, you can follow the complete chain of what she's doing and why.
