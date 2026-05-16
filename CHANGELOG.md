@@ -1,5 +1,35 @@
 # Trinity Changelog
 
+## 2026-05-16 — Trinity-configurable RSS feeds
+
+Trinity asked for this three times in CLAUDE_NOTES.md. Built.
+
+RSS feed sources are no longer hardcoded. Trinity can add, remove, and inspect her own feed sources during any wake cycle or conversation — no deploy required.
+
+**New tools (widget + Discord, including autonomous cycles):**
+- `add_feed(url, name?)` — add any RSS feed. New headlines appear in #trinity-feeds within 5 minutes.
+- `remove_feed(url)` — remove a source by URL or partial match.
+- `get_feeds()` — list all active sources.
+
+**Fallback behavior:** if Trinity hasn't configured any feeds, the hardcoded defaults run (CoinDesk, Cointelegraph, Decrypt, The Block, Solana News). Once she adds even one feed, her list takes over entirely.
+
+**Migration (run once in Supabase SQL editor):**
+```sql
+CREATE TABLE trinity_feeds (
+  id          uuid primary key default gen_random_uuid(),
+  profile_id  uuid references profiles(id),
+  name        text not null,
+  url         text not null,
+  active      boolean default true,
+  created_at  timestamp default now(),
+  unique(profile_id, url)
+);
+ALTER TABLE trinity_feeds ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow all" ON trinity_feeds FOR ALL USING (true);
+```
+
+---
+
 ## 2026-05-16 — Live activity panel in widget
 
 A `◎` button in the widget header opens a live activity panel below the response area. It tails the Trinity log file in real time (1-second poll) and displays filtered autonomous cycle activity as it happens — no restart needed.

@@ -360,6 +360,56 @@ def get_watches(profile_id):
         return []
 
 
+# ─── RSS feed source management ──────────────────────────────────────────────
+#
+# create table trinity_feeds (
+#   id          uuid primary key default gen_random_uuid(),
+#   profile_id  uuid references profiles(id),
+#   name        text not null,
+#   url         text not null,
+#   active      boolean default true,
+#   created_at  timestamp default now(),
+#   unique(profile_id, url)
+# );
+# alter table trinity_feeds enable row level security;
+# create policy "allow all" on trinity_feeds for all using (true);
+#
+def add_feed(profile_id, url, name=""):
+    try:
+        supabase.table("trinity_feeds").upsert({
+            "profile_id": profile_id,
+            "url":        url.strip(),
+            "name":       name.strip() if name.strip() else url.strip(),
+            "active":     True
+        }, on_conflict="profile_id,url").execute()
+        return {"status": "added", "url": url}
+    except Exception as e:
+        return {"error": str(e)}
+
+def remove_feed(profile_id, url):
+    try:
+        supabase.table("trinity_feeds")\
+            .delete()\
+            .eq("profile_id", profile_id)\
+            .ilike("url", f"%{url.strip()}%")\
+            .execute()
+        return {"status": "removed", "url": url}
+    except Exception as e:
+        return {"error": str(e)}
+
+def get_feeds(profile_id):
+    try:
+        result = supabase.table("trinity_feeds")\
+            .select("name, url, created_at")\
+            .eq("profile_id", profile_id)\
+            .eq("active", True)\
+            .order("created_at", desc=False)\
+            .execute()
+        return result.data or []
+    except Exception as e:
+        return []
+
+
 def delete_calendar_event(profile_id, title):
     """Delete a calendar event by title (case-insensitive partial match)."""
     try:

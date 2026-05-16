@@ -517,6 +517,34 @@ WIDGET_TOOLS = [
         "input_schema": {"type": "object", "properties": {}, "required": []}
     },
     {
+        "name": "add_feed",
+        "description": "Add an RSS feed source to your live feed. New headlines will appear in your #trinity-feeds channel within 5 minutes. Use for sources you discover — blogs, Reddit RSS, niche sites. If your list is empty, defaults are used.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url":  {"type": "string", "description": "RSS feed URL"},
+                "name": {"type": "string", "description": "Display name (optional)"}
+            },
+            "required": ["url"]
+        }
+    },
+    {
+        "name": "remove_feed",
+        "description": "Remove an RSS feed source from your live feed.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "Feed URL or partial match"}
+            },
+            "required": ["url"]
+        }
+    },
+    {
+        "name": "get_feeds",
+        "description": "List all active RSS feed sources. Empty means defaults are active.",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
         "name": "post_to_my_channel",
         "description": "Post a message to one of your Discord palace channels by name. Use for palace updates, archiving findings, or leaving notes in your own channels.",
         "input_schema": {
@@ -882,6 +910,28 @@ class TrinityWorker(QThread):
             if not profile:
                 return {"error": "No profile"}
             return _del(profile["id"], inputs["title"])
+
+        elif name == "add_feed":
+            from brain.memory import add_feed as _add_feed, get_profile as _gp
+            profile = _gp()
+            if not profile:
+                return {"error": "No profile"}
+            return _add_feed(profile["id"], inputs["url"], inputs.get("name", ""))
+
+        elif name == "remove_feed":
+            from brain.memory import remove_feed as _remove_feed, get_profile as _gp
+            profile = _gp()
+            if not profile:
+                return {"error": "No profile"}
+            return _remove_feed(profile["id"], inputs["url"])
+
+        elif name == "get_feeds":
+            from brain.memory import get_feeds as _get_feeds, get_profile as _gp
+            profile = _gp()
+            if not profile:
+                return {"error": "No profile"}
+            feeds = _get_feeds(profile["id"])
+            return {"feeds": feeds, "note": "Empty means defaults active (CoinDesk, Cointelegraph, Decrypt, The Block, Solana News)"}
 
         elif name == "set_watch":
             from brain.memory import set_watch as _set_watch, get_profile as _gp

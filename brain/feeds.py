@@ -44,21 +44,24 @@ def fetch_feed(name: str, url: str, max_age_hours: int = 6) -> list[dict]:
         return []
 
 
-def fetch_new_items(seen_hashes: set, max_age_hours: int = 6) -> list[dict]:
-    """Fetch all sources, return only items not in seen_hashes."""
+def fetch_new_items(seen_hashes: set, sources=None, max_age_hours: int = 6) -> list[dict]:
+    """Fetch all sources, return only items not in seen_hashes.
+    sources: list of (name, url) tuples. Falls back to FEED_SOURCES if None or empty."""
+    active = sources if sources else FEED_SOURCES
     new_items = []
-    for name, url in FEED_SOURCES:
+    for name, url in active:
         for item in fetch_feed(name, url, max_age_hours):
             if item["hash"] not in seen_hashes:
                 new_items.append(item)
     return new_items
 
 
-def seed_seen(max_age_hours: int = 6) -> set:
+def seed_seen(sources=None, max_age_hours: int = 6) -> set:
     """On startup, mark current feed state as already seen so we don't
     flood the channel with backlog on first run."""
+    active = sources if sources else FEED_SOURCES
     seen = set()
-    for name, url in FEED_SOURCES:
+    for name, url in active:
         for item in fetch_feed(name, url, max_age_hours):
             seen.add(item["hash"])
     return seen

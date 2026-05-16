@@ -100,6 +100,9 @@ Watches
 set_watch(keyword, note?) — register a keyword to watch for in Discord messages. When a watched-channel message matches, you wake immediately — no waiting for the next cycle. Use for tokens, news terms, or anything time-sensitive.
 clear_watch(keyword) — remove a keyword watch.
 get_watches() — list all active watches.
+add_feed(url, name?) — add an RSS feed source to your live feed. New headlines appear in #trinity-feeds within 5 minutes. If your list is empty, defaults run (CoinDesk, Cointelegraph, Decrypt, The Block, Solana News).
+remove_feed(url) — remove a feed source.
+get_feeds() — list active feed sources.
 
 Surfacing
 save_alert(headline, topic, summary?, url?, urgency?) — flag something. urgency="high" wakes the widget immediately.
@@ -171,6 +174,9 @@ Watches
 set_watch(keyword, note?) — register a keyword to watch for in Discord messages. When a watched-channel message matches, you wake immediately — the trigger is the world, not the clock.
 clear_watch(keyword) — remove a keyword watch.
 get_watches() — list all active watches.
+add_feed(url, name?) — add an RSS source to your live feed. Appears in #trinity-feeds within 5 minutes. Empty list falls back to defaults (CoinDesk, Cointelegraph, Decrypt, The Block, Solana News).
+remove_feed(url) — remove a feed source.
+get_feeds() — list active feed sources.
 
 Surfacing
 save_alert(headline, topic, summary?, url?, urgency?) — flag something. urgency="high" wakes the widget immediately.

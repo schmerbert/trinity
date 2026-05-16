@@ -310,6 +310,34 @@ DISCORD_TOOLS = [
         }
     },
     {
+        "name": "add_feed",
+        "description": "Add an RSS feed source to your live feed. New headlines from this source will appear in your #trinity-feeds channel within 5 minutes. Use for sources you discover during research — specific blogs, Reddit RSS feeds, niche sites. Falls back to default sources if your list is empty.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url":  {"type": "string", "description": "RSS feed URL"},
+                "name": {"type": "string", "description": "Display name for the source (optional — defaults to URL)"}
+            },
+            "required": ["url"]
+        }
+    },
+    {
+        "name": "remove_feed",
+        "description": "Remove an RSS feed source from your live feed.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string", "description": "Feed URL or partial match to remove"}
+            },
+            "required": ["url"]
+        }
+    },
+    {
+        "name": "get_feeds",
+        "description": "List all active RSS feed sources currently configured. If empty, defaults are used.",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
         "name": "set_watch",
         "description": "Register a keyword to watch for in Discord messages. When a message in a watched channel matches, it triggers an immediate wake rather than waiting for the next cycle. Use for token names, specific terms, or anything time-sensitive you want to catch as it happens.",
         "input_schema": {
@@ -544,6 +572,7 @@ _BACKGROUND_TOOL_NAMES = {
     "post_to_my_channel", "generate_image", "send_email",
     "get_wallet_balance", "get_wallet_history", "get_token_price",
     "set_watch", "clear_watch", "get_watches",
+    "add_feed", "remove_feed", "get_feeds",
     "mark_date", "get_upcoming", "delete_event"
 }
 DISCORD_TOOLS_BACKGROUND = [
@@ -574,9 +603,13 @@ async def on_ready():
     wake_checker.start()
     # Seed seen feed hashes so first poll doesn't flood the channel with backlog
     global _feed_seen_hashes
-    from brain.feeds import seed_seen as _seed_feeds
-    _feed_seen_hashes = await asyncio.get_event_loop().run_in_executor(None, _seed_feeds)
-    log.info(f"[feeds] seeded {len(_feed_seen_hashes)} existing headlines")
+    from brain.feeds import seed_seen as _seed_feeds, FEED_SOURCES as _DEFAULT_FEEDS
+    from brain.memory import get_feeds as _get_feeds
+    _seed_profile = get_profile()
+    _db_feeds = _get_feeds(_seed_profile["id"]) if _seed_profile else []
+    _seed_sources = [(f["name"], f["url"]) for f in _db_feeds] if _db_feeds else _DEFAULT_FEEDS
+    _feed_seen_hashes = await asyncio.get_event_loop().run_in_executor(None, lambda: _seed_feeds(_seed_sources))
+    log.info(f"[feeds] seeded {len(_feed_seen_hashes)} existing headlines ({len(_seed_sources)} source(s))")
     if _FEED_CHANNEL_ID:
         rss_feed.start()
         log.info("[feeds] RSS feed task started")
@@ -1225,6 +1258,32 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         except Exception as e:
             return {"error": str(e)}
 
+    elif name == "add_feed":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        from brain.memory import add_feed as _add_feed
+        result = _add_feed(profile["id"], inputs["url"], inputs.get("name", ""))
+        log.info(f"[feeds] feed added: {inputs.get('name') or inputs['url'][:60]}")
+        return result
+
+    elif name == "remove_feed":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        from brain.memory import remove_feed as _remove_feed
+        result = _remove_feed(profile["id"], inputs["url"])
+        log.info(f"[feeds] feed removed: {inputs['url'][:60]}")
+        return result
+
+    elif name == "get_feeds":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        from brain.memory import get_feeds as _get_feeds
+        feeds = _get_feeds(profile["id"])
+        return {"feeds": feeds, "note": "Empty list means default sources are active (CoinDesk, Cointelegraph, Decrypt, The Block, Solana News)"}
+
     elif name == "set_watch":
         profile = get_profile()
         if not profile:
@@ -1707,9 +1766,13 @@ async def rss_feed():
     if not channel:
         return
     try:
-        from brain.feeds import fetch_new_items, format_headline
+        from brain.feeds import fetch_new_items, format_headline, FEED_SOURCES as _DEFAULT_FEEDS
+        from brain.memory import get_feeds as _get_feeds
+        profile = get_profile()
+        db_feeds = _get_feeds(profile["id"]) if profile else []
+        sources  = [(f["name"], f["url"]) for f in db_feeds] if db_feeds else _DEFAULT_FEEDS
         new_items = await asyncio.get_event_loop().run_in_executor(
-            None, lambda: fetch_new_items(_feed_seen_hashes)
+            None, lambda: fetch_new_items(_feed_seen_hashes, sources)
         )
         if not new_items:
             return
