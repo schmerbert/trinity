@@ -14,11 +14,11 @@ from PyQt6.QtWidgets import (
     QFrame
 )
 from PyQt6.QtCore import (
-    Qt, QTimer, QPoint, pyqtSignal, QThread, QSize
+    Qt, QTimer, QPoint, pyqtSignal, QThread, QSize, QUrl
 )
 from PyQt6.QtGui import (
     QPainter, QColor, QPen, QFont, QIcon, QPixmap,
-    QPainterPath, QAction
+    QPainterPath, QAction, QDesktopServices
 )
 from dotenv import load_dotenv
 from pathlib import Path
@@ -949,6 +949,13 @@ class TrinityWidget(QMainWindow):
         self.findings_area.setReadOnly(True)
         self.findings_area.setMaximumHeight(240)
         self.findings_area.setFont(QFont("Courier New", 10))
+        self.findings_area.setOpenLinks(False)
+        self.findings_area.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextBrowserInteraction
+        )
+        self.findings_area.anchorClicked.connect(
+            lambda url: QDesktopServices.openUrl(url)
+        )
         self.findings_area.setStyleSheet("""
             QTextEdit {
                 background: rgba(10,20,35,180);
