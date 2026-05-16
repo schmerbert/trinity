@@ -1,5 +1,15 @@
 # Trinity Changelog
 
+## 2026-05-16 — Fetch and curate
+
+**fetch_url(url, max_chars?)** — available in both widget and Discord. Fetches content from any URL. HTML pages are stripped to readable text. Image URLs return metadata (type, content_type, size) rather than binary. max_chars caps text output at 4000 by default, 8000 max.
+
+**send_image(url, channel_name?, channel_id?, caption?)** — Discord only. Downloads an image from a URL and posts it as a Discord file attachment. Use `channel_name` for palace channels (partial match, same as read_my_channel). Optional caption as accompanying text. This is the curation path: find something worth keeping, place it in the right channel.
+
+**Scratchpad and shelf now injected at session start** — both load into the dynamic context block via `build_system_blocks`. Every session and wake cycle starts with full working context. No separate fetch needed.
+
+---
+
 ## 2026-05-15 — Self-awareness tools
 
 **get_changelog()** — read this file. Available in both widget and Discord.

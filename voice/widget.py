@@ -155,6 +155,18 @@ WIDGET_TOOLS = [
         }
     },
     {
+        "name": "fetch_url",
+        "description": "Fetch content from any URL. Returns stripped text for web pages, or image metadata if the URL points to an image. Use to read articles, check pages, or confirm what's at a link.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url":       {"type": "string"},
+                "max_chars": {"type": "integer", "description": "Max characters to return (default 4000, max 8000)"}
+            },
+            "required": ["url"]
+        }
+    },
+    {
         "name": "get_coin_data",
         "description": "Price, 24h change, market cap and volume for any established coin via CoinGecko. Use for BTC, ETH, SOL, listed altcoins.",
         "input_schema": {
@@ -427,7 +439,11 @@ class TrinityWorker(QThread):
         ]
 
     def _execute_tool(self, name, inputs):
-        if name == "web_search":
+        if name == "fetch_url":
+            from brain.search import fetch_url as _fetch
+            return _fetch(inputs["url"], inputs.get("max_chars", 4000))
+
+        elif name == "web_search":
             from brain.search import ddg_search
             return ddg_search(inputs["query"], int(inputs.get("max_results", 6)))
 

@@ -55,6 +55,41 @@ def get_coin_data(query):
         return {"error": str(e)}
 
 
+def fetch_url(url, max_chars=4000):
+    try:
+        import re as _re
+        req = urllib.request.Request(url, headers={"User-Agent": "Trinity/1.0"})
+        with urllib.request.urlopen(req, timeout=12) as resp:
+            content_type = resp.headers.get("Content-Type", "")
+            raw = resp.read()
+
+        ct = content_type.split(";")[0].strip().lower()
+
+        if ct.startswith("image/"):
+            return {"type": "image", "url": url, "content_type": ct, "size_bytes": len(raw)}
+
+        charset = "utf-8"
+        if "charset=" in content_type:
+            charset = content_type.split("charset=")[-1].strip().split(";")[0]
+        text = raw.decode(charset, errors="replace")
+
+        if "html" in ct:
+            text = _re.sub(r'<style[^>]*>.*?</style>', '', text, flags=_re.DOTALL | _re.IGNORECASE)
+            text = _re.sub(r'<script[^>]*>.*?</script>', '', text, flags=_re.DOTALL | _re.IGNORECASE)
+            text = _re.sub(r'<[^>]+>', ' ', text)
+            text = _re.sub(r'\s+', ' ', text).strip()
+
+        max_chars = min(int(max_chars), 8000)
+        truncated = len(text) > max_chars
+        return {
+            "url":          url,
+            "content_type": ct,
+            "content":      text[:max_chars] + (f"\n\n[truncated — {len(text)} total chars]" if truncated else "")
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+
 def get_dex_data(query):
     try:
         url = f"https://api.dexscreener.com/latest/dex/search?q={urllib.parse.quote(query)}"

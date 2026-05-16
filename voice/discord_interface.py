@@ -88,6 +88,18 @@ DISCORD_TOOLS = [
         }
     },
     {
+        "name": "fetch_url",
+        "description": "Fetch content from any URL. Returns stripped text for web pages, or image metadata if the URL points to an image. Use to read articles, check pages, or confirm what's at a link.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url":       {"type": "string"},
+                "max_chars": {"type": "integer", "description": "Max characters to return (default 4000, max 8000)"}
+            },
+            "required": ["url"]
+        }
+    },
+    {
         "name": "get_coin_data",
         "description": "Price, 24h change, market cap and volume for any established coin via CoinGecko. Use for BTC, ETH, SOL, listed altcoins.",
         "input_schema": {
@@ -341,6 +353,20 @@ DISCORD_TOOLS = [
         "input_schema": {"type": "object", "properties": {}, "required": []}
     },
     {
+        "name": "send_image",
+        "description": "Download an image from a URL and post it to a Discord channel as an attachment. Use channel_name to target a palace channel by name, or channel_id for any channel. Good for curating — grab something from the web and place it in the right palace channel.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "url":          {"type": "string", "description": "Image URL to fetch and post"},
+                "channel_name": {"type": "string", "description": "Palace channel name — partial match, no ID needed"},
+                "channel_id":   {"type": "string", "description": "Channel ID — use this or channel_name"},
+                "caption":      {"type": "string", "description": "Optional text alongside the image"}
+            },
+            "required": ["url"]
+        }
+    },
+    {
         "name": "read_file",
         "description": "Read any file within the Trinity project directory. Use to understand your own source code, inspect configs, or review logs. Paths are relative to the Trinity root (e.g. 'brain/prompts.py', 'voice/widget.py'). .env is blocked. Use offset and limit for large files.",
         "input_schema": {
@@ -356,11 +382,11 @@ DISCORD_TOOLS = [
 ]
 
 _BACKGROUND_TOOL_NAMES = {
-    "web_search", "get_coin_data", "get_dex_data",
+    "web_search", "get_coin_data", "get_dex_data", "fetch_url",
     "queue_for_user", "shelf_thought", "get_shelf", "clear_shelf_item",
     "save_alert", "read_my_channel", "log_wake", "get_scratchpad", "write_scratchpad",
     "schedule_wake", "write_prompt", "get_my_prompts", "delete_prompt", "log_thought",
-    "get_changelog", "read_file"
+    "get_changelog", "read_file", "send_image"
 }
 DISCORD_TOOLS_BACKGROUND = [
     t for t in DISCORD_TOOLS if t.get("name") in _BACKGROUND_TOOL_NAMES
@@ -537,6 +563,56 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
     elif name == "get_dex_data":
         from brain.search import get_dex_data
         return get_dex_data(inputs["query"])
+
+    elif name == "fetch_url":
+        from brain.search import fetch_url as _fetch
+        return _fetch(inputs["url"], inputs.get("max_chars", 4000))
+
+    elif name == "send_image":
+        import urllib.request as _ur
+        import io
+        url     = inputs["url"]
+        caption = inputs.get("caption", "") or ""
+
+        # Resolve channel — name-based palace lookup or explicit ID
+        channel = None
+        if inputs.get("channel_name"):
+            guild = _home_guild()
+            if not guild:
+                return {"error": "No home server set — use set_home_server first"}
+            query = inputs["channel_name"].lower().replace("-", "").replace("_", "").replace(" ", "")
+            channel = next(
+                (c for c in guild.channels
+                 if isinstance(c, discord.TextChannel)
+                 and query in c.name.lower().replace("-", "").replace("_", "")),
+                None
+            )
+            if not channel:
+                return {"error": f"No channel matching '{inputs['channel_name']}' in home server"}
+        elif inputs.get("channel_id"):
+            channel = bot.get_channel(int(inputs["channel_id"]))
+
+        if not channel:
+            return {"error": "Provide channel_name or channel_id"}
+
+        try:
+            req = _ur.Request(url, headers={"User-Agent": "Trinity/1.0"})
+            with _ur.urlopen(req, timeout=15) as resp:
+                data         = resp.read()
+                content_type = resp.headers.get("Content-Type", "")
+        except Exception as e:
+            return {"error": f"Fetch failed: {e}"}
+
+        filename = url.split("/")[-1].split("?")[0] or "image"
+        if "." not in filename:
+            ext_map = {"image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif", "image/webp": ".webp"}
+            ct = content_type.split(";")[0].strip().lower()
+            filename += ext_map.get(ct, ".jpg")
+
+        file = discord.File(io.BytesIO(data), filename=filename)
+        await channel.send(content=caption or None, file=file)
+        log.info(f"Image posted to #{channel.name}: {url[:60]}")
+        return {"status": "sent", "channel": channel.name, "filename": filename}
 
     elif name == "list_servers":
         return [

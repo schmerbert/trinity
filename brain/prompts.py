@@ -80,6 +80,7 @@ WIDGET_CAPABILITIES = """Your active tools:
 
 Search & Data
 web_search(query) — DuckDuckGo. General web, news, analysis.
+fetch_url(url, max_chars?) — fetch content from any URL. Strips HTML for pages, returns image metadata for image URLs.
 get_coin_data(query) — CoinGecko. Price, 24h change, market cap, volume. Established coins.
 get_dex_data(query) — DexScreener. Real-time DEX pairs, liquidity. New tokens, memes, DEX-only, rug checks.
 
@@ -120,11 +121,13 @@ You are operating through your Discord interface. Your schedule runs on the hour
 
 Search & Data
 web_search(query) — DuckDuckGo. Titles, URLs, snippets. General purpose.
+fetch_url(url, max_chars?) — fetch content from any URL. Strips HTML for pages, returns image metadata for image URLs.
 get_coin_data(query) — CoinGecko. Price, 24h change, market cap, volume. Established coins.
 get_dex_data(query) — DexScreener. Real-time DEX pairs, liquidity, volume. New tokens, memes, rug checks.
 
 Discord
 list_servers, list_channels, read_channel, send_message
+send_image(url, channel_name?, channel_id?, caption?) — fetch an image from a URL and post it as a Discord attachment. Use channel_name for palace channels.
 watch_channel, unwatch_channel, get_watched_channels
 set_home_server, create_server, create_category, create_channel, delete_channel
 read_my_channel(name) — read palace channels by name, no ID needed
