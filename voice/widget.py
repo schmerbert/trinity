@@ -967,8 +967,9 @@ class TrinityWidget(QMainWindow):
         if not alerts and not queued:
             return
         self._load_findings(alerts)
-        count = len(alerts) + len(queued)
-        self._notify(f"Trinity has {count} thing{'s' if count > 1 else ''} for you.")
+        mark_alerts_seen(self.profile["id"])
+        self.wave.set_state("alert")
+        QTimer.singleShot(6000, lambda: self.wave.set_state("idle"))
 
     def _check_urgent_alerts(self):
         if not self.profile:
@@ -979,14 +980,9 @@ class TrinityWidget(QMainWindow):
         self._load_findings(alerts)
         mark_alerts_seen(self.profile["id"])
         self.wave.set_state("urgent")
-        self._notify("Trinity — urgent.", urgent=True)
         if not self._tts_active:
             alert_text = "\n".join(f"- {a['headline']}" for a in alerts[:3])
             self._ask_trinity(f"You flagged this as urgent:\n{alert_text}\n\nTell me now.")
-
-    def _notify(self, message, urgent=False):
-        icon = QSystemTrayIcon.MessageIcon.Critical if urgent else QSystemTrayIcon.MessageIcon.Information
-        self.tray.showMessage("Trinity", message, icon, 8000)
 
     # --- Trinity query ---
     def _ask_trinity(self, user_text):
