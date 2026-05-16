@@ -401,11 +401,13 @@ async def on_ready():
     await _post_pending_alerts()
     if _HOME_GUILD_ID_ENV:
         profile = get_profile()
-        if profile and not profile.get("discord_home_guild_id"):
+        if profile and str(profile.get("discord_home_guild_id", "")) != str(_HOME_GUILD_ID_ENV):
             supabase.table("profiles").update({
                 "discord_home_guild_id": _HOME_GUILD_ID_ENV
             }).eq("id", profile["id"]).execute()
-            log.info(f"Home guild set from env: {_HOME_GUILD_ID_ENV}")
+            log.info(f"Home guild synced from env: {_HOME_GUILD_ID_ENV}")
+        elif profile:
+            log.info(f"Home guild: {_HOME_GUILD_ID_ENV}")
     autonomous_loop.change_interval(minutes=AUTONOMOUS_MINUTES)
     autonomous_loop.start()
     log.info(f"Autonomous loop every {AUTONOMOUS_MINUTES} min | Eyes every 2 min | Thought drain every 30s")
@@ -578,8 +580,12 @@ async def _read_history(channel, limit):
 def _home_guild() -> discord.Guild | None:
     profile = get_profile()
     if not profile or not profile.get("discord_home_guild_id"):
+        log.warn("_home_guild: no guild ID in profile")
         return None
-    return bot.get_guild(int(profile["discord_home_guild_id"]))
+    guild = bot.get_guild(int(profile["discord_home_guild_id"]))
+    if not guild:
+        log.warn(f"_home_guild: bot.get_guild({profile['discord_home_guild_id']}) returned None — bot not in that server?")
+    return guild
 
 # ─── Tool execution ───────────────────────────────────────────────────────────
 
