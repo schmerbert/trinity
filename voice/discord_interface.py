@@ -365,6 +365,31 @@ DISCORD_TOOLS = [
         }
     },
     {
+        "name": "post_to_my_channel",
+        "description": "Post a message to one of your palace channels by name — no channel ID needed. Use for intentional posts to specific channels.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name":    {"type": "string", "description": "Channel name — partial, case-insensitive match"},
+                "content": {"type": "string", "description": "Message to post"}
+            },
+            "required": ["name", "content"]
+        }
+    },
+    {
+        "name": "generate_image",
+        "description": "Generate an image from a text prompt using Pollinations AI (free, no API key). Returns the image URL. Optionally post it directly to a palace channel.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "prompt":       {"type": "string", "description": "Image generation prompt"},
+                "channel_name": {"type": "string", "description": "Palace channel name to post to (optional)"},
+                "caption":      {"type": "string", "description": "Optional caption for the post"}
+            },
+            "required": ["prompt"]
+        }
+    },
+    {
         "name": "send_image",
         "description": "Download an image from a URL and post it to a Discord channel as an attachment. Use channel_name to target a palace channel by name, or channel_id for any channel. Good for curating — grab something from the web and place it in the right palace channel.",
         "input_schema": {
@@ -398,7 +423,8 @@ _BACKGROUND_TOOL_NAMES = {
     "queue_for_user", "shelf_thought", "get_shelf", "clear_shelf_item",
     "save_alert", "read_my_channel", "log_wake", "get_scratchpad", "write_scratchpad",
     "schedule_wake", "write_prompt", "get_my_prompts", "delete_prompt", "log_thought",
-    "get_changelog", "read_file", "send_image", "note_for_claude"
+    "get_changelog", "read_file", "send_image", "note_for_claude",
+    "post_to_my_channel", "generate_image"
 }
 DISCORD_TOOLS_BACKGROUND = [
     t for t in DISCORD_TOOLS if t.get("name") in _BACKGROUND_TOOL_NAMES
@@ -1024,6 +1050,61 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
             log.info(f"Note for Claude [{tag}]: {inputs['message'][:60]}")
             return {"status": "noted"}
         except Exception as e:
+            return {"error": str(e)}
+
+    elif name == "post_to_my_channel":
+        guild = _home_guild()
+        if not guild:
+            return {"error": "No home server set"}
+        query = inputs["name"].lower().replace("-", "").replace("_", "").replace(" ", "")
+        channel = next(
+            (c for c in guild.channels
+             if isinstance(c, discord.TextChannel)
+             and query in c.name.lower().replace("-", "").replace("_", "")),
+            None
+        )
+        if not channel:
+            return {"error": f"No channel matching '{inputs['name']}' in home server"}
+        try:
+            for chunk in [inputs["content"][i:i+1900] for i in range(0, len(inputs["content"]), 1900)]:
+                await channel.send(chunk)
+            log.info(f"post #{channel.name}: {inputs['content'][:60]}")
+            return {"status": "posted", "channel": channel.name}
+        except discord.Forbidden as e:
+            log.error(f"post_to_my_channel 403 on #{channel.name}: {e}")
+            return {"error": f"403 {e}"}
+
+    elif name == "generate_image":
+        try:
+            import urllib.parse, io
+            import requests as _req
+            prompt     = inputs["prompt"]
+            encoded    = urllib.parse.quote(prompt)
+            image_url  = f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=1024&nologo=true&seed={hash(prompt) % 99999}"
+            log.info(f"Generating image: {prompt[:60]}")
+            r = _req.get(image_url, timeout=60)
+            if not r.ok:
+                return {"error": f"Pollinations error {r.status_code}"}
+            channel_name = inputs.get("channel_name")
+            if channel_name:
+                guild = _home_guild()
+                if guild:
+                    query = channel_name.lower().replace("-", "").replace("_", "").replace(" ", "")
+                    channel = next(
+                        (c for c in guild.channels
+                         if isinstance(c, discord.TextChannel)
+                         and query in c.name.lower().replace("-", "").replace("_", "")),
+                        None
+                    )
+                    if channel:
+                        file = discord.File(io.BytesIO(r.content), filename="image.png")
+                        caption = inputs.get("caption")
+                        await channel.send(content=caption or None, file=file)
+                        log.info(f"Image posted to #{channel.name}")
+                        return {"status": "posted", "channel": channel.name, "url": image_url}
+            return {"status": "generated", "url": image_url}
+        except Exception as e:
+            log.error(f"generate_image error: {e}")
             return {"error": str(e)}
 
     elif name == "get_changelog":

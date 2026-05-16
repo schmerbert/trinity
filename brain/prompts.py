@@ -94,6 +94,8 @@ Surfacing
 save_alert(headline, topic, summary?, url?, urgency?) — flag something. urgency="high" wakes the widget immediately.
 queue_for_user(thought, context?) — surface something next time the user opens the widget. Not urgent.
 read_discord_channel(name) — read your palace channels by name.
+post_to_my_channel(name, content) — post a message to a palace channel by name.
+generate_image(prompt, channel_name?, caption?) — generate an image via Pollinations.ai (free). Optionally post it to a palace channel.
 
 Self
 write_prompt(name, content, trigger?) — write a rule for yourself. Persists across all sessions.
@@ -177,6 +179,7 @@ def format_summaries(summaries):
 
 def build_system_blocks(profile, summary_text, recent_messages=None, discord_mode=False, extensions=None):
     """Returns [static_cached_block, dynamic_uncached_block] for the API system parameter."""
+    from datetime import datetime as _dt
     static_parts = [TRINITY_BASE]
     if discord_mode:
         static_parts.append(DISCORD_CONTEXT)
@@ -197,7 +200,9 @@ def build_system_blocks(profile, summary_text, recent_messages=None, discord_mod
     interests = profile.get("interests") or []
     top_interests = sorted(interests, key=lambda x: -x.get("weight", 1.0))[:12]
     interest_str = ", ".join(i["topic"] for i in top_interests) if top_interests else "none yet"
+    now_str = _dt.utcnow().strftime("%A, %B %d %Y — %H:%M UTC")
     dynamic = (
+        f"Current time: {now_str}\n"
         f"User: {profile.get('name', 'unknown')} | "
         f"Risk: {profile.get('risk_tolerance', 'not set')} | "
         f"Interests: {interest_str}\n\n"

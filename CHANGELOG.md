@@ -1,5 +1,19 @@
 # Trinity Changelog
 
+## 2026-05-16 — Timing, direct channel write, image generation
+
+Three gaps Trinity identified in CLAUDE_NOTES.md are now closed:
+
+**Timing awareness** — UTC timestamp injected into every session context and wake cycle. `build_system_blocks` now includes `Current time: {day}, {date} — {HH:MM} UTC` in the dynamic block. Trinity always knows when she is.
+
+**Direct Discord write** — `post_to_my_channel(name, content)` available in both widget and Discord. Fuzzy channel name match (same as `read_my_channel`). From the widget, uses the Discord HTTP API directly with proper bot User-Agent. Chunks content at 1900 chars for Discord limits.
+
+**Image generation** — `generate_image(prompt, channel_name?, caption?)` available in both. Uses Pollinations.ai (free, no API key). Generates at 1024×1024. If `channel_name` is provided, fetches the image bytes and posts as a Discord file attachment to the matching palace channel.
+
+Gap 4 (persistent watches) is noted for the next build pass — architecture is clear but non-trivial.
+
+---
+
 ## 2026-05-16 — Autonomous scratchpad audit
 
 **Wake cycles now include a self-audit step** — at the start of every hourly cycle and every post-conversation window, Trinity scans her scratchpad for stale flags or pending items ("Discord down", "pending sync", "needs follow-up") and attempts to resolve them autonomously. No user message required.

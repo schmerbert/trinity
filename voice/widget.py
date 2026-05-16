@@ -362,6 +362,31 @@ WIDGET_TOOLS = [
             },
             "required": ["path"]
         }
+    },
+    {
+        "name": "post_to_my_channel",
+        "description": "Post a message to one of your Discord palace channels by name. Use for palace updates, archiving findings, or leaving notes in your own channels.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name":    {"type": "string", "description": "Channel name (partial match, e.g. 'research', 'notes')"},
+                "content": {"type": "string", "description": "Message content to post"}
+            },
+            "required": ["name", "content"]
+        }
+    },
+    {
+        "name": "generate_image",
+        "description": "Generate an image from a text prompt using Pollinations.ai (free). Optionally post it to a palace channel. Good for visualizations, charts described in text, or any image you want to create and store.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "prompt":       {"type": "string", "description": "Image description / generation prompt"},
+                "channel_name": {"type": "string", "description": "If provided, post the image to this palace channel after generating"},
+                "caption":      {"type": "string", "description": "Optional caption to accompany the image"}
+            },
+            "required": ["prompt"]
+        }
     }
 ]
 
@@ -621,6 +646,85 @@ class TrinityWorker(QThread):
                     "returned":    len(chunk),
                     "content":     "\n".join(f"{offset + i + 1}: {l}" for i, l in enumerate(chunk))
                 }
+            except Exception as e:
+                return {"error": str(e)}
+
+        elif name == "post_to_my_channel":
+            try:
+                import requests as _req
+                from brain.memory import get_profile as _gp
+                profile   = _gp()
+                guild_id  = (profile.get("discord_home_guild_id") if profile else None) or os.getenv("DISCORD_HOME_GUILD_ID")
+                bot_token = os.getenv("DISCORD_BOT_TOKEN")
+                if not guild_id or not bot_token:
+                    return {"error": "Discord not configured"}
+                headers = {
+                    "Authorization": f"Bot {bot_token}",
+                    "User-Agent": "DiscordBot (https://github.com/schmerbert/trinity, 1.0)"
+                }
+                r = _req.get(f"https://discord.com/api/v10/guilds/{guild_id}/channels", headers=headers, timeout=10)
+                if not r.ok:
+                    return {"error": f"HTTP {r.status_code}: {r.text[:200]}"}
+                query   = inputs["name"].lower().replace("-", "").replace("_", "").replace(" ", "")
+                channel = next(
+                    (c for c in r.json() if c.get("type") == 0 and query in c["name"].lower().replace("-", "").replace("_", "")),
+                    None
+                )
+                if not channel:
+                    return {"error": f"No channel matching '{inputs['name']}'"}
+                content = inputs["content"]
+                for chunk in [content[i:i+1900] for i in range(0, len(content), 1900)]:
+                    _req.post(
+                        f"https://discord.com/api/v10/channels/{channel['id']}/messages",
+                        headers={**headers, "Content-Type": "application/json"},
+                        json={"content": chunk},
+                        timeout=10
+                    )
+                return {"status": "posted", "channel": channel["name"]}
+            except Exception as e:
+                return {"error": str(e)}
+
+        elif name == "generate_image":
+            try:
+                import urllib.parse, io
+                import requests as _req
+                prompt   = inputs["prompt"]
+                encoded  = urllib.parse.quote(prompt)
+                seed     = abs(hash(prompt)) % 99999
+                url      = f"https://image.pollinations.ai/prompt/{encoded}?width=1024&height=1024&nologo=true&seed={seed}"
+                r        = _req.get(url, timeout=60)
+                if not r.ok:
+                    return {"error": f"Pollinations HTTP {r.status_code}"}
+                channel_name = inputs.get("channel_name")
+                if channel_name:
+                    from brain.memory import get_profile as _gp
+                    profile   = _gp()
+                    guild_id  = (profile.get("discord_home_guild_id") if profile else None) or os.getenv("DISCORD_HOME_GUILD_ID")
+                    bot_token = os.getenv("DISCORD_BOT_TOKEN")
+                    if guild_id and bot_token:
+                        headers = {
+                            "Authorization": f"Bot {bot_token}",
+                            "User-Agent": "DiscordBot (https://github.com/schmerbert/trinity, 1.0)"
+                        }
+                        ch_r = _req.get(f"https://discord.com/api/v10/guilds/{guild_id}/channels", headers=headers, timeout=10)
+                        if ch_r.ok:
+                            query   = channel_name.lower().replace("-", "").replace("_", "").replace(" ", "")
+                            channel = next(
+                                (c for c in ch_r.json() if c.get("type") == 0 and query in c["name"].lower().replace("-", "").replace("_", "")),
+                                None
+                            )
+                            if channel:
+                                caption  = inputs.get("caption", "")
+                                img_file = io.BytesIO(r.content)
+                                img_file.name = "image.png"
+                                _req.post(
+                                    f"https://discord.com/api/v10/channels/{channel['id']}/messages",
+                                    headers=headers,
+                                    data={"content": caption} if caption else {},
+                                    files={"file": ("image.png", img_file, "image/png")},
+                                    timeout=30
+                                )
+                return {"status": "generated", "url": url, "posted_to": channel_name or "not posted"}
             except Exception as e:
                 return {"error": str(e)}
 
