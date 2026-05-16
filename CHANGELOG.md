@@ -1,5 +1,15 @@
 # Trinity Changelog
 
+## 2026-05-16 — Bridge wake: closes the 2-hour inactivity gap
+
+Previously: conversation ends → post-conv wake at +12 min → next hourly skipped → up to ~2 hours of silence before the next autonomous cycle.
+
+Now: conversation ends → post-conv wake at +12 min → next hourly still skipped → bridge wake fires 30 min after post-conv wake → hourly resumes normally from there.
+
+Worst-case gap is now ~30 minutes instead of ~2 hours. The skip is preserved to avoid triple-cycling immediately after a conversation, but a single bridge cycle fills the window before the next hourly takes over.
+
+---
+
 ## 2026-05-16 — Wallet Phase 1: read-only on-chain awareness
 
 Trinity now has wallet tools. Phase 1 is read-only — no private key, no transactions. Pure awareness.

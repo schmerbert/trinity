@@ -1590,6 +1590,14 @@ async def before_thought_drain():
 
 # ─── Post-conversation wake cycle ────────────────────────────────────────────
 
+async def _bridge_wake(profile_id: str, minutes: int = 30):
+    """Fires a single bridge wake N minutes after the post-conversation wake,
+    so the gap between post-conv and the next hourly stays under ~30 min
+    instead of potentially stretching to nearly 2 hours."""
+    await asyncio.sleep(minutes * 60)
+    request_wake(profile_id)
+    log.info(f"Bridge wake fired — resuming hourly from next cycle")
+
 @tasks.loop(seconds=30)
 async def wake_checker():
     profile = get_profile()
@@ -1619,7 +1627,8 @@ async def wake_checker():
     _skip_next_autonomous = True
     try:
         await _call_trinity(system_blocks, [{"role": "user", "content": api_message}], profile["id"], retry=False, background=True)
-        log.info("Post-conversation wake complete — next hourly cycle will be skipped")
+        log.info("Post-conversation wake complete — next hourly skipped, bridge wake in 30min")
+        asyncio.create_task(_bridge_wake(profile["id"], minutes=30))
     except Exception as e:
         log.error(f"Wake checker: {e}")
 
