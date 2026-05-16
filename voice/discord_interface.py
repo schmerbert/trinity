@@ -642,18 +642,28 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         log.info(f"read channel: #{channel.name if channel else inputs['channel_id']}")
         limit = min(int(inputs.get("limit", 25)), 50)
         msgs = []
-        async for msg in channel.history(limit=limit, oldest_first=False):
-            entry = {
-                "author":    str(msg.author.display_name),
-                "content":   msg.content,
-                "timestamp": msg.created_at.isoformat()
-            }
-            if msg.attachments:
-                entry["attachments"] = [
-                    {"url": a.url, "filename": a.filename, "type": a.content_type or ""}
-                    for a in msg.attachments
-                ]
-            msgs.append(entry)
+        try:
+            async for msg in channel.history(limit=limit, oldest_first=False):
+                entry = {
+                    "author":    str(msg.author.display_name),
+                    "content":   msg.content,
+                    "timestamp": msg.created_at.isoformat()
+                }
+                if msg.attachments:
+                    entry["attachments"] = [
+                        {"url": a.url, "filename": a.filename, "type": a.content_type or ""}
+                        for a in msg.attachments
+                    ]
+                msgs.append(entry)
+        except discord.Forbidden as e:
+            log.error(f"read_channel 403 on #{channel.name} (id={channel.id}): {e.text}")
+            return {"error": f"403 {e.text}"}
+        except Exception as e:
+            log.error(f"read_channel error on #{channel.name}: {e}")
+            return {"error": str(e)}
+        empty_content = sum(1 for m in msgs if not m["content"].strip())
+        if msgs:
+            log.info(f"read #{channel.name}: {len(msgs)} messages, {empty_content} with empty content")
         return msgs
 
     elif name == "send_message":
@@ -886,18 +896,28 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         log.info(f"read #{channel.name}")
         limit = min(int(inputs.get("limit", 20)), 50)
         msgs = []
-        async for msg in channel.history(limit=limit, oldest_first=False):
-            entry = {
-                "author":    str(msg.author.display_name),
-                "content":   msg.content,
-                "timestamp": msg.created_at.isoformat()
-            }
-            if msg.attachments:
-                entry["attachments"] = [
-                    {"url": a.url, "filename": a.filename, "type": a.content_type or ""}
-                    for a in msg.attachments
-                ]
-            msgs.append(entry)
+        try:
+            async for msg in channel.history(limit=limit, oldest_first=False):
+                entry = {
+                    "author":    str(msg.author.display_name),
+                    "content":   msg.content,
+                    "timestamp": msg.created_at.isoformat()
+                }
+                if msg.attachments:
+                    entry["attachments"] = [
+                        {"url": a.url, "filename": a.filename, "type": a.content_type or ""}
+                        for a in msg.attachments
+                    ]
+                msgs.append(entry)
+        except discord.Forbidden as e:
+            log.error(f"read_my_channel 403 on #{channel.name} (id={channel.id}): {e.text}")
+            return {"error": f"403 {e.text}"}
+        except Exception as e:
+            log.error(f"read_my_channel error on #{channel.name}: {e}")
+            return {"error": str(e)}
+        empty_content = sum(1 for m in msgs if not m["content"].strip())
+        if msgs:
+            log.info(f"read #{channel.name}: {len(msgs)} messages, {empty_content} with empty content")
         return msgs
 
     elif name == "log_wake":

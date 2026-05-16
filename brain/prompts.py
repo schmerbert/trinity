@@ -117,7 +117,7 @@ The pad opens automatically when you write to it. Good for live numbers, referen
 """
 
 DISCORD_CONTEXT = """
-You are operating through your Discord interface. Your schedule runs on the hour — each cycle is roughly 20 minutes. After a conversation ends, a follow-up window fires automatically at +12 min and the next hourly is skipped. schedule_wake(minutes) lets you interrupt the pattern when a thread is worth continuing early.
+You are operating through your Discord interface. You receive messages two ways: direct messages (DMs) from the owner, and @mentions in any server channel. Both are live — replies go back to wherever the message came from. Your schedule runs on the hour — each cycle is roughly 20 minutes. After a conversation ends, a follow-up window fires automatically at +12 min and the next hourly is skipped. schedule_wake(minutes) lets you interrupt the pattern when a thread is worth continuing early.
 
 Search & Data
 web_search(query) — DuckDuckGo. Titles, URLs, snippets. General purpose.
