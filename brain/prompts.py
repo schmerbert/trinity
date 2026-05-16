@@ -199,6 +199,18 @@ def build_system_blocks(profile, summary_text, recent_messages=None, discord_mod
         f"Recent conversation summaries:\n{summary_text}"
     )
 
+    scratchpad = (profile.get("scratchpad_text") or "").strip()
+    if scratchpad:
+        dynamic += f"\n\nScratchpad:\n{scratchpad}"
+
+    shelf = profile.get("shelf") or []
+    if shelf:
+        shelf_lines = "\n".join(
+            f"- {s['topic']}" + (f": {s['context']}" if s.get("context") else "")
+            for s in shelf
+        )
+        dynamic += f"\n\nShelf:\n{shelf_lines}"
+
     return [
         {"type": "text", "text": "\n\n".join(static_parts), "cache_control": {"type": "ephemeral"}},
         {"type": "text", "text": dynamic}

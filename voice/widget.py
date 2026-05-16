@@ -939,10 +939,6 @@ class TrinityWidget(QMainWindow):
 
         extensions    = ["scratchpad"] if _SCRATCHPAD else []
         system_blocks = build_system_blocks(self.profile, self.summary_text, self.history, extensions=extensions)
-        if _SCRATCHPAD and self._scratchpad:
-            pad_text = self._scratchpad._text.toPlainText().strip()
-            if pad_text:
-                system_blocks[-1]["text"] += f"\n\nYour current scratchpad:\n{pad_text}"
         messages = self.history + [{"role": "user", "content": user_text}]
 
         self.worker = TrinityWorker(self.client, system_blocks, messages, self.profile["id"])
