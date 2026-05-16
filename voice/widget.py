@@ -305,6 +305,11 @@ WIDGET_TOOLS = [
             },
             "required": ["content", "category"]
         }
+    },
+    {
+        "name": "get_changelog",
+        "description": "Read what's been added, changed, or improved in Trinity. Check this when something feels different, when you want to understand your own capabilities, or when the user mentions an update.",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
     }
 ]
 
@@ -514,6 +519,13 @@ class TrinityWorker(QThread):
             ts       = _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
             push_discord_write(profile["id"], f"{icon} **{category.upper()}** — {ts}\n{inputs['content']}")
             return {"status": "logged", "category": category}
+
+        elif name == "get_changelog":
+            try:
+                changelog_path = Path(__file__).parent.parent / "CHANGELOG.md"
+                return {"content": changelog_path.read_text(encoding="utf-8")}
+            except Exception as e:
+                return {"error": str(e)}
 
         return {"error": f"Unknown tool: {name}"}
 

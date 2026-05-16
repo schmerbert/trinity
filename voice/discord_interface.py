@@ -334,6 +334,11 @@ DISCORD_TOOLS = [
             },
             "required": ["content", "category"]
         }
+    },
+    {
+        "name": "get_changelog",
+        "description": "Read what's been added, changed, or improved in Trinity. Check this when something feels different, when you want to understand your own capabilities, or when the user mentions an update.",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
     }
 ]
 
@@ -341,7 +346,8 @@ _BACKGROUND_TOOL_NAMES = {
     "web_search", "get_coin_data", "get_dex_data",
     "queue_for_user", "shelf_thought", "get_shelf", "clear_shelf_item",
     "save_alert", "read_my_channel", "log_wake", "get_scratchpad", "write_scratchpad",
-    "schedule_wake", "write_prompt", "get_my_prompts", "delete_prompt", "log_thought"
+    "schedule_wake", "write_prompt", "get_my_prompts", "delete_prompt", "log_thought",
+    "get_changelog"
 }
 DISCORD_TOOLS_BACKGROUND = [
     t for t in DISCORD_TOOLS if t.get("name") in _BACKGROUND_TOOL_NAMES
@@ -862,6 +868,14 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         await channel.send(f"{icon} **{category.upper()}** — {ts}\n{inputs['content']}")
         log.info(f"Log [{category}]: {inputs['content'][:60]}")
         return {"status": "logged", "category": category}
+
+    elif name == "get_changelog":
+        try:
+            from pathlib import Path as _Path
+            changelog_path = _Path(__file__).parent.parent / "CHANGELOG.md"
+            return {"content": changelog_path.read_text(encoding="utf-8")}
+        except Exception as e:
+            return {"error": str(e)}
 
     return {"error": f"Unknown tool: {name}"}
 

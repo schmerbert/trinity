@@ -99,6 +99,7 @@ write_prompt(name, content, trigger?) — write a rule for yourself. Persists ac
 get_my_prompts() — audit every rule you've written.
 delete_prompt(name) — retire a rule you've changed your mind about.
 log_thought(content, category) — private log. Routes to your palace. Categories: need | want | issue | note.
+get_changelog() — read what's been added or changed. Check when something feels different or when told the log's been updated.
 
 Tags (stripped from display)
 <prompt name="kebab-name" trigger="optional"> — write a rule inline.
@@ -143,6 +144,7 @@ write_prompt(name, content, trigger?) — write a rule that persists to all futu
 get_my_prompts() — audit every rule you've written.
 delete_prompt(name) — retire a rule you've changed your mind about.
 log_thought(content, category) — private log. Categories: need | want | issue | note.
+get_changelog() — read what's been added or changed. Check when something feels different or when told the log's been updated.
 
 Your Discord server is your memory palace. Build it however you like. trinity_only channels are invisible to everyone else.
 """
