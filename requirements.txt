@@ -6,6 +6,8 @@ praw
 feedparser
 pycoingecko
 rich
-edge-tts
+kokoro-onnx
+pygame
 PyQt6
 discord.py
+duckduckgo-search

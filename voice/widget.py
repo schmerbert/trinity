@@ -649,12 +649,15 @@ class TrinityWidget(QMainWindow):
         self._tts_active    = False
         self._tts_stop      = False
         self._stream_buffer = ""
+        self._kokoro        = None
+        self._tts_voice     = os.getenv("TRINITY_TTS_VOICE", "af_sarah")
 
         self._setup_window()
         self._setup_ui()
         self._setup_tray()
         self._scratchpad = ScratchpadPanel(self) if _SCRATCHPAD else None
         self._init_log()
+        self._init_tts()
 
         # Idle collapse timer — hides response area after inactivity
         self._idle_timer = QTimer()
@@ -1138,62 +1141,84 @@ class TrinityWidget(QMainWindow):
         return clean
 
     # --- TTS ---
+    def _init_tts(self):
+        def _load():
+            try:
+                import urllib.request
+                import pygame
+                pygame.mixer.init(frequency=24000, size=-16, channels=1, buffer=512)
+
+                cache_dir   = Path.home() / ".cache" / "kokoro"
+                cache_dir.mkdir(parents=True, exist_ok=True)
+                model_path  = cache_dir / "kokoro-v0_19.onnx"
+                voices_path = cache_dir / "voices-v1.0.bin"
+                base_url    = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1"
+
+                for fname, path in [("kokoro-v0_19.onnx", model_path), ("voices-v1.0.bin", voices_path)]:
+                    if not path.exists():
+                        log.info(f"Downloading TTS model: {fname} (one-time)...")
+                        urllib.request.urlretrieve(f"{base_url}/{fname}", path)
+                        log.info(f"Downloaded: {fname}")
+
+                from kokoro_onnx import Kokoro
+                self._kokoro = Kokoro(str(model_path), str(voices_path))
+                log.info(f"Kokoro TTS ready — voice: {self._tts_voice}")
+            except Exception as e:
+                log.warn(f"Kokoro TTS unavailable: {e}")
+        threading.Thread(target=_load, daemon=True).start()
+
     def _speak(self, text):
         try:
-            import asyncio
+            import numpy as np
+            import wave
             import tempfile
-            import subprocess
-            import edge_tts
+            import pygame
 
-            if self._tts_stop:
-                self._tts_active = False
+            if self._tts_stop or self._kokoro is None:
                 return
 
-            async def _gen():
-                with tempfile.NamedTemporaryFile(suffix=".mp3", delete=False) as f:
-                    tmp = f.name
-                comm = edge_tts.Communicate(text, "en-US-AriaNeural", rate="+30%")
-                await comm.save(tmp)
-                return tmp
+            samples, sample_rate = self._kokoro.create(
+                text, voice=self._tts_voice, speed=1.0, lang="en-us"
+            )
 
-            tmp_path = asyncio.run(_gen())
+            if self._tts_stop:
+                return
 
-            if not self._tts_stop:
-                if sys.platform == "win32":
-                    import winsound
-                    wav = tmp_path.replace(".mp3", ".wav")
-                    try:
-                        subprocess.run(["ffmpeg", "-y", "-i", tmp_path, wav], capture_output=True, timeout=10)
-                        if not self._tts_stop:
-                            winsound.PlaySound(wav, winsound.SND_FILENAME)
-                        os.unlink(wav)
-                    except Exception:
-                        if not self._tts_stop:
-                            subprocess.run(
-                                ["powershell", "-c", f"(New-Object Media.SoundPlayer '{tmp_path}').PlaySync()"],
-                                capture_output=True, timeout=30
-                            )
-                else:
-                    subprocess.run(["mpg123", "-q", tmp_path], capture_output=True)
+            samples_i16 = (np.clip(samples, -1.0, 1.0) * 32767).astype(np.int16)
+            with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+                tmp = f.name
+            with wave.open(tmp, "wb") as wf:
+                wf.setnchannels(1)
+                wf.setsampwidth(2)
+                wf.setframerate(sample_rate)
+                wf.writeframes(samples_i16.tobytes())
+
+            pygame.mixer.music.load(tmp)
+            pygame.mixer.music.play()
+            while pygame.mixer.music.get_busy():
+                if self._tts_stop:
+                    pygame.mixer.music.stop()
+                    break
+                time.sleep(0.05)
 
             try:
-                os.unlink(tmp_path)
+                os.unlink(tmp)
             except Exception:
                 pass
 
-        except Exception:
-            pass
+        except Exception as e:
+            log.warn(f"TTS: {e}")
         finally:
             self._tts_active = False
 
     def _stop_tts(self):
         self._tts_stop = True
-        if sys.platform == "win32":
-            try:
-                import winsound
-                winsound.PlaySound(None, winsound.SND_PURGE)
-            except Exception:
-                pass
+        try:
+            import pygame
+            if pygame.mixer.get_init():
+                pygame.mixer.music.stop()
+        except Exception:
+            pass
 
     def _update_stop_btn(self):
         if self._tts_active:
