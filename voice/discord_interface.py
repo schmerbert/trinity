@@ -1192,13 +1192,15 @@ async def _palace_pulse(limit_per_channel: int = 12) -> str:
                 if content:
                     msgs.append(f"  [{ts}] {author}: {content}")
             if not msgs:
+                log.info(f"[pulse] #{channel.name}: empty")
                 return None
             msgs.reverse()  # chronological order
+            log.info(f"[pulse] #{channel.name}: {len(msgs)} message{'s' if len(msgs) != 1 else ''}")
             return f"#{channel.name}:\n" + "\n".join(msgs)
         except discord.Forbidden:
             return None
         except Exception as e:
-            log.warn(f"palace_pulse #{channel.name}: {e}")
+            log.warn(f"[pulse] #{channel.name}: {e}")
             return None
 
     # Thought channel
@@ -1441,14 +1443,39 @@ async def _call_trinity(system_blocks: list, messages: list, profile_id: str, re
         return await _call_trinity_inner(system_blocks, messages, profile_id, retry=retry, background=background)
 
 
+def _fmt_tool_call(name: str, inputs: dict) -> str:
+    """One-line summary of a tool call for logging."""
+    key_fields = {
+        "web_search":        lambda i: i.get("query", "")[:60],
+        "fetch_url":         lambda i: i.get("url", "")[:60],
+        "get_coin_data":     lambda i: i.get("query", ""),
+        "get_dex_data":      lambda i: i.get("query", ""),
+        "save_alert":        lambda i: f"[{i.get('urgency','normal')}] {i.get('headline','')[:50]}",
+        "queue_for_user":    lambda i: i.get("thought", "")[:60],
+        "shelf_thought":     lambda i: i.get("topic", "")[:60],
+        "write_prompt":      lambda i: f"{i.get('name','')} [{i.get('category','general')}]",
+        "log_thought":       lambda i: f"[{i.get('category','')}] {i.get('content','')[:50]}",
+        "post_to_my_channel":lambda i: f"#{i.get('name','')} — {i.get('content','')[:40]}",
+        "generate_image":    lambda i: i.get("prompt", "")[:60],
+        "read_my_channel":   lambda i: f"#{i.get('name','')}",
+        "send_message":      lambda i: f"#{i.get('channel_name') or i.get('channel_id','')} — {i.get('content','')[:40]}",
+        "log_wake":          lambda i: i.get("summary", "")[:60],
+        "write_scratchpad":  lambda i: i.get("content", "")[:60],
+        "note_for_claude":   lambda i: f"[{i.get('tag','')}] {i.get('message','')[:50]}",
+    }
+    detail = key_fields.get(name, lambda i: "")(inputs)
+    return f"{name}({detail})" if detail else name
+
+
 async def _call_trinity_inner(system_blocks: list, messages: list, profile_id: str, retry: bool = True, background: bool = False) -> str:
     loop = asyncio.get_event_loop()
-    retries   = 0
-    model     = "claude-haiku-4-5-20251001" if background else "claude-sonnet-4-6"
-    max_iters = 4 if background else 12
-    max_tok   = 600 if background else 1000
-    tools     = DISCORD_TOOLS_BACKGROUND if background else DISCORD_TOOLS
-    iters     = 0
+    retries    = 0
+    model      = "claude-haiku-4-5-20251001" if background else "claude-sonnet-4-6"
+    max_iters  = 4 if background else 12
+    max_tok    = 600 if background else 1000
+    tools      = DISCORD_TOOLS_BACKGROUND if background else DISCORD_TOOLS
+    iters      = 0
+    tool_count = 0
 
     while True:
         if iters >= max_iters:
@@ -1479,7 +1506,10 @@ async def _call_trinity_inner(system_blocks: list, messages: list, profile_id: s
             raise
 
         if response.stop_reason == "end_turn":
-            return next((b.text for b in response.content if hasattr(b, "text")), "")
+            reply = next((b.text for b in response.content if hasattr(b, "text")), "")
+            if tool_count:
+                log.info(f"← done ({tool_count} tool call{'s' if tool_count != 1 else ''})")
+            return reply
 
         if response.stop_reason == "tool_use":
             assistant_content = []
@@ -1497,7 +1527,9 @@ async def _call_trinity_inner(system_blocks: list, messages: list, profile_id: s
             tool_results = []
             for block in response.content:
                 if block.type == "tool_use":
+                    log.info(f"→ {_fmt_tool_call(block.name, block.input)}")
                     result = await _execute_tool(block.name, block.input, profile_id)
+                    tool_count += 1
                     tool_results.append({
                         "type":        "tool_result",
                         "tool_use_id": block.id,
@@ -1521,6 +1553,10 @@ async def _respond(message: discord.Message):
 
     if not user_text and not image_atts:
         return
+
+    src = "DM" if isinstance(message.channel, discord.DMChannel) else f"#{message.channel.name}"
+    img_note = f" + {len(image_atts)} image(s)" if image_atts else ""
+    log.info(f"[{src}] {message.author.display_name}: {user_text[:70]}{img_note}")
 
     # Build API content — text + image vision blocks if attachments present
     if image_atts:
@@ -1565,6 +1601,7 @@ async def _respond(message: discord.Message):
         history.append({"role": "assistant", "content": clean})
         _conversations[user_id] = history[-20:]
 
+        log.info(f"← reply ({len(clean)} chars): {clean[:60].replace(chr(10), ' ')}")
         for chunk in [clean[i:i + 1900] for i in range(0, len(clean), 1900)]:
             await message.reply(chunk)
 
@@ -1614,10 +1651,13 @@ def _strip_memory(reply: str, profile) -> str:
             if m["type"] == "interest":
                 add_interest(profile["id"], m["topic"], m.get("weight", 1.0),
                              category=m.get("category"), symbol=m.get("symbol"))
+                log.info(f"◆ interest: {m['topic']} (weight {m.get('weight', 1.0)})")
             elif m["type"] == "feedback":
                 add_feedback(profile["id"], m["topic"], m["sentiment"])
+                log.info(f"◆ feedback: {m['topic']} → {m['sentiment']}")
             elif m["type"] == "risk":
                 update_profile(profile["id"], {"risk_tolerance": m["value"]})
+                log.info(f"◆ risk: {m['value']}")
         except Exception:
             pass
     return clean

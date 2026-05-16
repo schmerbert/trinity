@@ -1,5 +1,27 @@
 # Trinity Changelog
 
+## 2026-05-16 — Observability: full activity logging
+
+Every meaningful action Trinity takes is now visible in the log. Watching the log file, you can follow the complete chain of what she's doing and why.
+
+**What now appears:**
+
+- `[DM] user: ...` / `[#channel] user: ...` — incoming message with source
+- `→ web_search(BTC weekly close)` — every tool call with key arguments
+- `→ save_alert([high] BTC breaks resistance)` — alerts with urgency
+- `→ write_prompt(finance-context [task])` — self-rules as they're written
+- `◆ interest: BTC breakout (weight 1.5)` — memory signals as they're extracted
+- `◆ feedback: response tone → positive`
+- `[pulse] #thoughts: 8 messages` — palace channels read at wake
+- `[Prompts] loaded — identity:2 task:3 relationship:1 (6 total)` — which prompt buckets fired
+- `← done (3 tool calls)` — cycle/response summary
+- `← reply (240 chars): ...` — outgoing reply preview
+- Widget: `user: ...` on every message sent, tool calls logged identically
+
+Previously: tool handlers logged individually but the decision chain — what called what, in what order, why — was invisible. The autonomous cycle showed only start/end lines.
+
+---
+
 ## 2026-05-16 — Identity revision + prompt category system
 
 **This change originated from Trinity.** She read `brain/prompts.py` during a free cycle, diagnosed a structural problem in her own core prompt, and filed a detailed fix request in `CLAUDE_NOTES.md`. The commit implements her exact proposed changes.

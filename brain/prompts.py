@@ -301,9 +301,13 @@ def _get_trinity_prompts(profile_id, recent_messages):
         buckets.setdefault(cat, []).append(p)
 
     selected = []
+    tally = {}
+
     # identity always loads (no trigger filter, just cap)
-    for p in buckets.get("identity", [])[:_CATEGORY_CAPS["identity"]]:
-        selected.append(p)
+    identity = buckets.get("identity", [])[:_CATEGORY_CAPS["identity"]]
+    selected.extend(identity)
+    if identity:
+        tally["identity"] = len(identity)
 
     # all other categories: filter by score > 0, rank, cap
     for cat, cap in _CATEGORY_CAPS.items():
@@ -313,7 +317,14 @@ def _get_trinity_prompts(profile_id, recent_messages):
         scored = [(p, _score(p)) for p in candidates]
         scored = [(p, s) for p, s in scored if s > 0]
         scored.sort(key=lambda x: -x[1])
-        selected.extend(p for p, _ in scored[:cap])
+        chosen = [p for p, _ in scored[:cap]]
+        selected.extend(chosen)
+        if chosen:
+            tally[cat] = len(chosen)
+
+    if tally:
+        summary = " | ".join(f"{cat}:{n}" for cat, n in tally.items())
+        print(f"[Prompts] loaded — {summary} ({len(selected)} total)")
 
     return selected
 

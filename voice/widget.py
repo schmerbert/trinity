@@ -61,6 +61,26 @@ IDLE_COLLAPSE_MS = 90_000
 
 _MD_STRIP = re.compile(r'\*{1,2}|_{1,2}|`+|#{1,6}\s*|>\s*|^\s*[-•]\s*', re.MULTILINE)
 
+def _fmt_widget_tool(name: str, inputs: dict) -> str:
+    key_fields = {
+        "web_search":        lambda i: i.get("query", "")[:60],
+        "fetch_url":         lambda i: i.get("url", "")[:60],
+        "get_coin_data":     lambda i: i.get("query", ""),
+        "get_dex_data":      lambda i: i.get("query", ""),
+        "save_alert":        lambda i: f"[{i.get('urgency','normal')}] {i.get('headline','')[:50]}",
+        "queue_for_user":    lambda i: i.get("thought", "")[:60],
+        "shelf_thought":     lambda i: i.get("topic", "")[:60],
+        "write_prompt":      lambda i: f"{i.get('name','')} [{i.get('category','general')}]",
+        "log_thought":       lambda i: f"[{i.get('category','')}] {i.get('content','')[:50]}",
+        "post_to_my_channel":lambda i: f"#{i.get('name','')} — {i.get('content','')[:40]}",
+        "generate_image":    lambda i: i.get("prompt", "")[:60],
+        "read_discord_channel": lambda i: f"#{i.get('name','')}",
+        "write_scratchpad":  lambda i: i.get("content", "")[:60],
+        "note_for_claude":   lambda i: f"[{i.get('tag','')}] {i.get('message','')[:50]}",
+    }
+    detail = key_fields.get(name, lambda i: "")(inputs)
+    return f"{name}({detail})" if detail else name
+
 def _strip_for_tts(text):
     text = re.sub(r'http\S+', '', text)
     text = _MD_STRIP.sub('', text)
@@ -480,6 +500,7 @@ class TrinityWorker(QThread):
         tool_results = []
         for block in content:
             if block.type == "tool_use":
+                log.info(f"→ {_fmt_widget_tool(block.name, block.input)}")
                 result = self._execute_tool(block.name, block.input)
                 tool_results.append({
                     "type":        "tool_result",
@@ -1124,6 +1145,7 @@ class TrinityWidget(QMainWindow):
 
     # --- Trinity query ---
     def _ask_trinity(self, user_text):
+        log.info(f"user: {user_text[:80]}")
         self.wave.set_state("active")
         self.status_label.setText("thinking...")
         self.input_field.setEnabled(False)
