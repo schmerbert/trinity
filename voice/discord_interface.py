@@ -68,6 +68,7 @@ _conversations: dict[int, list]  = {}
 _watched_channels: set[int]      = set()
 _api_lock = asyncio.Semaphore(1)
 _last_eyes_check: datetime       = datetime.utcnow()
+_skip_next_autonomous: bool      = False
 
 # ─── Tools Trinity can use ───────────────────────────────────────────────────
 
@@ -842,14 +843,22 @@ async def _startup_brief():
 
 @tasks.loop(minutes=60)
 async def autonomous_loop():
+    global _skip_next_autonomous
+    from datetime import timezone as _tz
+
+    # Skip if a post-conversation wake just fired — next hour resumes normally
+    if _skip_next_autonomous:
+        _skip_next_autonomous = False
+        log.info("Autonomous loop skipped — post-conversation wake already ran")
+        return
+
     profile = get_profile()
     if not profile:
         return
 
-    from datetime import timezone as _tz
-    now = datetime.now().strftime("%A, %B %d — %H:%M")
+    now_str = datetime.now().strftime("%A, %B %d — %H:%M")
 
-    # Skip if user was active recently — they already have fresh context
+    # Guard: don't fire if user messaged in the last 10 minutes (mid-conversation)
     raw_last_seen = profile.get("last_seen")
     last_seen_str = "unknown"
     if raw_last_seen:
@@ -861,11 +870,15 @@ async def autonomous_loop():
             minutes_ago = delta.total_seconds() / 60
             h, m = divmod(int(delta.total_seconds()), 3600)
             last_seen_str = f"{h}h {m // 60}m ago" if h else f"{int(minutes_ago)}m ago"
-            if minutes_ago < 30:
-                log.info(f"Autonomous loop skipped — user active {int(minutes_ago)}m ago")
+            if minutes_ago < 10:
+                log.info(f"Autonomous loop skipped — user mid-conversation ({int(minutes_ago)}m ago)")
                 return
         except Exception:
             last_seen_str = raw_last_seen[:16]
+
+    if _api_lock.locked():
+        log.info(f"Autonomous loop skipped — API busy ({now_str})")
+        return
 
     interests    = profile.get("interests") or []
     shelf        = get_shelf(profile["id"])
@@ -879,33 +892,36 @@ async def autonomous_loop():
             f"- [{w['at'][:16]}] {w['summary']}" for w in wake_history
         )
 
-    context = f"""{now}
+    context = f"""{now_str}
 
 User last seen: {last_seen_str}
 Shelf: {shelf_str}
 Radar: {interest_str}{wake_str}
 
-Use web_search sparingly — only when a specific thread warrants it."""
+Hourly window — roughly 20 minutes. Use web_search sparingly."""
 
     summaries     = get_recent_summaries(profile["id"])
-    summary_text  = format_summaries(summaries)
-    system_blocks = build_system_blocks(profile, summary_text, [], discord_mode=True)
-
-    if _api_lock.locked():
-        log.info(f"Autonomous loop skipped — API busy ({now})")
-        return
+    system_blocks = build_system_blocks(profile, format_summaries(summaries), [], discord_mode=True)
 
     try:
         await _call_trinity(system_blocks, [{"role": "user", "content": context}], profile["id"], retry=False, background=True)
-        log.info(f"Autonomous check-in complete ({now})")
+        log.info(f"Autonomous cycle complete ({now_str})")
     except Exception as e:
         log.error(f"Autonomous loop: {e}")
     finally:
-        autonomous_loop.change_interval(minutes=AUTONOMOUS_MINUTES)
+        # Realign to the next :00 mark regardless of how long the cycle took
+        now = datetime.utcnow()
+        minutes_to_next = (60 - now.minute) or 60
+        autonomous_loop.change_interval(minutes=minutes_to_next)
 
 @autonomous_loop.before_loop
 async def before_autonomous():
     await bot.wait_until_ready()
+    # Sleep until the next :00 mark so cycles always fire on the hour
+    now = datetime.utcnow()
+    seconds_to_next_hour = (60 - now.minute) * 60 - now.second
+    log.info(f"Autonomous loop aligning — first cycle in {seconds_to_next_hour // 60}m {seconds_to_next_hour % 60}s")
+    await asyncio.sleep(seconds_to_next_hour)
 
 
 # ─── Eyes monitor — evaluates watcher signals, escalates if real ─────────────
@@ -1005,9 +1021,11 @@ async def wake_checker():
         "check your shelf, write a rule if something clicked, explore anything worth pursuing. "
         "No need to log unless it's genuinely worth keeping."
     )
+    global _skip_next_autonomous
+    _skip_next_autonomous = True
     try:
         await _call_trinity(system_blocks, [{"role": "user", "content": context}], profile["id"], retry=False, background=True)
-        log.info("Post-conversation wake complete")
+        log.info("Post-conversation wake complete — next hourly cycle will be skipped")
     except Exception as e:
         log.error(f"Wake checker: {e}")
 
