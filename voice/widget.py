@@ -709,11 +709,11 @@ class TrinityWidget(QMainWindow):
             Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setFixedWidth(340)
-        self.setMinimumHeight(160)
+        self.setFixedWidth(680)
+        self.setMinimumHeight(320)
 
         screen = QApplication.primaryScreen().geometry()
-        self.move(screen.width() - 360, 20)
+        self.move(screen.width() - 700, 20)
 
     # --- UI ---
     def _setup_ui(self):
@@ -728,35 +728,35 @@ class TrinityWidget(QMainWindow):
         # Header
         header = QHBoxLayout()
         title = QLabel("T R I N I T Y")
-        title.setFont(QFont("Courier New", 10, QFont.Weight.Bold))
+        title.setFont(QFont("Courier New", 13, QFont.Weight.Bold))
         title.setStyleSheet("color: rgb(80, 180, 255);")
 
         self.status_label = QLabel("watching")
-        self.status_label.setFont(QFont("Courier New", 7))
+        self.status_label.setFont(QFont("Courier New", 9))
         self.status_label.setStyleSheet("color: rgb(60, 100, 150);")
 
-        btn_style = "QPushButton { background: transparent; color: rgb(60,100,150); border: none; font-size: 11px; } QPushButton:hover { color: rgb(80,180,255); }"
+        btn_style = "QPushButton { background: transparent; color: rgb(60,100,150); border: none; font-size: 14px; } QPushButton:hover { color: rgb(80,180,255); }"
 
         self.voice_btn = QPushButton("◉")
-        self.voice_btn.setFixedSize(20, 20)
+        self.voice_btn.setFixedSize(28, 28)
         self.voice_btn.setStyleSheet(btn_style)
         self.voice_btn.setToolTip("Toggle voice")
         self.voice_btn.clicked.connect(self._toggle_voice)
 
         self.stop_btn = QPushButton("■")
-        self.stop_btn.setFixedSize(20, 20)
+        self.stop_btn.setFixedSize(28, 28)
         self.stop_btn.setStyleSheet(btn_style)
         self.stop_btn.setToolTip("Stop voice")
         self.stop_btn.clicked.connect(self._stop_tts)
 
         self.sidebar_btn = QPushButton("≡")
-        self.sidebar_btn.setFixedSize(20, 20)
+        self.sidebar_btn.setFixedSize(28, 28)
         self.sidebar_btn.setStyleSheet(btn_style)
         self.sidebar_btn.setToolTip("Findings")
         self.sidebar_btn.clicked.connect(self._toggle_sidebar)
 
         close_btn = QPushButton("×")
-        close_btn.setFixedSize(20, 20)
+        close_btn.setFixedSize(28, 28)
         close_btn.setStyleSheet(btn_style)
         close_btn.clicked.connect(self._hide_to_tray)
 
@@ -765,7 +765,7 @@ class TrinityWidget(QMainWindow):
         header.addStretch()
         if _SCRATCHPAD:
             self.scratch_btn = QPushButton("✎")
-            self.scratch_btn.setFixedSize(20, 20)
+            self.scratch_btn.setFixedSize(28, 28)
             self.scratch_btn.setStyleSheet(btn_style)
             self.scratch_btn.setToolTip("Scratchpad")
             self.scratch_btn.clicked.connect(self._toggle_scratchpad)
@@ -783,9 +783,9 @@ class TrinityWidget(QMainWindow):
         # Response area
         self.response_area = QTextEdit()
         self.response_area.setReadOnly(True)
-        self.response_area.setMaximumHeight(160)
-        self.response_area.setMinimumHeight(60)
-        self.response_area.setFont(QFont("Courier New", 9))
+        self.response_area.setMaximumHeight(320)
+        self.response_area.setMinimumHeight(120)
+        self.response_area.setFont(QFont("Courier New", 11))
         self.response_area.setStyleSheet("""
             QTextEdit {
                 background: transparent;
@@ -805,15 +805,15 @@ class TrinityWidget(QMainWindow):
         sidebar_layout.setContentsMargins(0, 4, 0, 0)
 
         sidebar_label = QLabel("— findings —")
-        sidebar_label.setFont(QFont("Courier New", 7))
+        sidebar_label.setFont(QFont("Courier New", 9))
         sidebar_label.setStyleSheet("color: rgb(60,100,150);")
         sidebar_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         sidebar_layout.addWidget(sidebar_label)
 
         self.findings_area = QTextEdit()
         self.findings_area.setReadOnly(True)
-        self.findings_area.setMaximumHeight(120)
-        self.findings_area.setFont(QFont("Courier New", 8))
+        self.findings_area.setMaximumHeight(240)
+        self.findings_area.setFont(QFont("Courier New", 10))
         self.findings_area.setStyleSheet("""
             QTextEdit {
                 background: rgba(10,20,35,180);
@@ -836,7 +836,7 @@ class TrinityWidget(QMainWindow):
         input_row = QHBoxLayout()
         self.input_field = QLineEdit()
         self.input_field.setPlaceholderText("say something...")
-        self.input_field.setFont(QFont("Courier New", 9))
+        self.input_field.setFont(QFont("Courier New", 11))
         self.input_field.setStyleSheet("""
             QLineEdit {
                 background: rgba(15,25,40,200);
@@ -852,8 +852,8 @@ class TrinityWidget(QMainWindow):
         self.input_field.returnPressed.connect(self._send)
 
         send_btn = QPushButton("→")
-        send_btn.setFixedSize(28, 28)
-        send_btn.setFont(QFont("Courier New", 12))
+        send_btn.setFixedSize(40, 40)
+        send_btn.setFont(QFont("Courier New", 14))
         send_btn.setStyleSheet("""
             QPushButton {
                 background: rgba(40,100,180,120);
@@ -1039,16 +1039,13 @@ class TrinityWidget(QMainWindow):
         self.input_field.setFocus()
         self._idle_timer.start()
 
-        if self.tts_enabled and self._kokoro is not None:
-            self.response_area.clear()
+        self._display(clean)
+        if self.tts_enabled:
             self._tts_stop = False
             self._tts_active = True
-            threading.Thread(target=self._speak_chunked, args=(clean,), daemon=True).start()
-        else:
-            self._display(clean)
-            if self.tts_enabled:
-                self._tts_stop = False
-                self._tts_active = True
+            if self._kokoro is not None:
+                threading.Thread(target=self._speak_chunked, args=(clean,), daemon=True).start()
+            else:
                 spoken = _strip_for_tts(clean)
                 threading.Thread(target=self._speak, args=(spoken,), daemon=True).start()
 
@@ -1215,26 +1212,22 @@ class TrinityWidget(QMainWindow):
         import pygame
         from concurrent.futures import ThreadPoolExecutor
         try:
-            sentences = _split_sentences(clean_text)
-            pairs = [(s + " ", _strip_for_tts(s)) for s in sentences if _strip_for_tts(s).strip()]
-            if not pairs:
-                self.sentence_spoken.emit(clean_text)
+            tts_sentences = [_strip_for_tts(s) for s in _split_sentences(clean_text)]
+            tts_sentences = [s for s in tts_sentences if s.strip()]
+            if not tts_sentences:
                 return
 
             with ThreadPoolExecutor(max_workers=1) as ex:
-                future = ex.submit(self._generate_audio, pairs[0][1])
+                future = ex.submit(self._generate_audio, tts_sentences[0])
 
-                for i, (display_s, _) in enumerate(pairs):
+                for i, _ in enumerate(tts_sentences):
                     if self._tts_stop:
-                        self.sentence_spoken.emit("".join(d for d, _ in pairs[i:]))
                         return
 
                     tmp = future.result()
 
-                    if i + 1 < len(pairs):
-                        future = ex.submit(self._generate_audio, pairs[i + 1][1])
-
-                    self.sentence_spoken.emit(display_s)
+                    if i + 1 < len(tts_sentences):
+                        future = ex.submit(self._generate_audio, tts_sentences[i + 1])
 
                     pygame.mixer.music.load(tmp)
                     pygame.mixer.music.play()
@@ -1250,14 +1243,10 @@ class TrinityWidget(QMainWindow):
                         pass
 
                     if self._tts_stop:
-                        remaining = "".join(d for d, _ in pairs[i + 1:])
-                        if remaining:
-                            self.sentence_spoken.emit(remaining)
                         return
 
         except Exception as e:
             log.warn(f"TTS chunked: {e}")
-            self.sentence_spoken.emit(clean_text)
         finally:
             self._tts_active = False
 
