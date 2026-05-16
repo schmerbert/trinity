@@ -107,7 +107,7 @@ queue_for_user(thought, context?) — surface something next time the user opens
 send_email(subject, body) — send an email directly to the user. Use ONLY when: (1) something time-sensitive is happening right now, (2) a specific named trigger condition they've already indicated they care about has been hit, and (3) no other channel will reach them in time. The bar is intentionally high — noise erodes the signal.
 
 Palace
-read_discord_channel(name) — read your palace channels by name.
+read_discord_channel(name) — read your palace channels by name. Also works as read_my_channel(name).
 post_to_my_channel(name, content) — post a message to a palace channel by name.
 generate_image(prompt, channel_name?, caption?) — generate an image via Pollinations.ai (free). Optionally post it to a palace channel.
 

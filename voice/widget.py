@@ -828,7 +828,8 @@ class TrinityWorker(QThread):
         elif name == "get_changelog":
             try:
                 changelog_path = Path(__file__).parent.parent / "CHANGELOG.md"
-                return {"content": changelog_path.read_text(encoding="utf-8")}
+                text = changelog_path.read_text(encoding="utf-8")
+                return {"content": text[:6000] + ("\n\n[...truncated — use read_file('CHANGELOG.md', offset=N) for older entries]" if len(text) > 6000 else "")}
             except Exception as e:
                 return {"error": str(e)}
 
@@ -1063,7 +1064,6 @@ class TrinityWidget(QMainWindow):
         self._setup_tray()
         self._scratchpad = ScratchpadPanel(self) if _SCRATCHPAD else None
         self._init_log()
-        self._init_activity_log()
         self._init_tts()
         self.sentence_spoken.connect(self._on_sentence_spoken)
 
@@ -1095,6 +1095,7 @@ class TrinityWidget(QMainWindow):
         self._log_poll = QTimer()
         self._log_poll.setInterval(1000)
         self._log_poll.timeout.connect(self._poll_activity_log)
+        self._init_activity_log()
 
         self._init_trinity()
 
@@ -1539,7 +1540,7 @@ class TrinityWidget(QMainWindow):
         from datetime import date
         log_path = Path(__file__).parent.parent / "logs" / f"trinity_{date.today()}.log"
         self._activity_file_pos = log_path.stat().st_size if log_path.exists() else 0
-        self._log_poll.start()
+        self._log_poll.start()  # timer already created in __init__ before this call
 
     def _toggle_activity(self):
         self._activity_visible = not self._activity_visible

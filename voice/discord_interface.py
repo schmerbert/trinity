@@ -1391,7 +1391,8 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         try:
             from pathlib import Path as _Path
             changelog_path = _Path(__file__).parent.parent / "CHANGELOG.md"
-            return {"content": changelog_path.read_text(encoding="utf-8")}
+            text = changelog_path.read_text(encoding="utf-8")
+            return {"content": text[:6000] + ("\n\n[...truncated — use read_file('CHANGELOG.md', offset=N) for older entries]" if len(text) > 6000 else "")}
         except Exception as e:
             return {"error": str(e)}
 
