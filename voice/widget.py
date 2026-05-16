@@ -17,7 +17,7 @@ from PyQt6.QtCore import (
     Qt, QTimer, QPoint, pyqtSignal, QThread, QSize
 )
 from PyQt6.QtGui import (
-    QPainter, QColor, QPen, QFont, QIcon,
+    QPainter, QColor, QPen, QFont, QIcon, QPixmap,
     QPainterPath, QAction
 )
 from dotenv import load_dotenv
@@ -860,6 +860,21 @@ class TrinityWidget(QMainWindow):
     def _setup_tray(self):
         self.tray = QSystemTrayIcon(self)
         self.tray.setToolTip("Trinity")
+
+        # Programmatic icon — blue ring on dark background
+        pixmap = QPixmap(32, 32)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        p = QPainter(pixmap)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        p.setBrush(QColor(40, 140, 255))
+        p.setPen(Qt.PenStyle.NoPen)
+        p.drawEllipse(1, 1, 30, 30)
+        p.setBrush(QColor(8, 12, 20))
+        p.drawEllipse(9, 9, 14, 14)
+        p.end()
+        icon = QIcon(pixmap)
+        self.tray.setIcon(icon)
+        self.setWindowIcon(icon)
 
         tray_menu = QMenu()
         show_action = QAction("Open Trinity", self)

@@ -554,18 +554,22 @@ def _home_guild() -> discord.Guild | None:
 async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list:
     if name == "web_search":
         from brain.search import ddg_search
+        log.info(f"search: {inputs['query'][:70]}")
         return ddg_search(inputs["query"], int(inputs.get("max_results", 6)))
 
     elif name == "get_coin_data":
         from brain.search import get_coin_data
+        log.info(f"coin: {inputs['query']}")
         return get_coin_data(inputs["query"])
 
     elif name == "get_dex_data":
         from brain.search import get_dex_data
+        log.info(f"dex: {inputs['query']}")
         return get_dex_data(inputs["query"])
 
     elif name == "fetch_url":
         from brain.search import fetch_url as _fetch
+        log.info(f"fetch: {inputs['url'][:70]}")
         return _fetch(inputs["url"], inputs.get("max_chars", 4000))
 
     elif name == "send_image":
@@ -635,6 +639,7 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         channel = bot.get_channel(int(inputs["channel_id"]))
         if not channel:
             return {"error": "Channel not found or no access"}
+        log.info(f"read channel: #{channel.name if channel else inputs['channel_id']}")
         limit = min(int(inputs.get("limit", 25)), 50)
         msgs = []
         async for msg in channel.history(limit=limit, oldest_first=False):
@@ -822,19 +827,23 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         if not profile:
             return {"error": "No profile"}
         add_to_shelf(profile["id"], inputs["topic"], inputs.get("context", ""))
+        log.info(f"→ shelf: {inputs['topic'][:60]}")
         return {"status": "shelved", "topic": inputs["topic"]}
 
     elif name == "get_shelf":
         profile = get_profile()
         if not profile:
             return {"error": "No profile"}
-        return get_shelf(profile["id"]) or []
+        shelf = get_shelf(profile["id"]) or []
+        log.info(f"shelf: {len(shelf)} item(s)")
+        return shelf
 
     elif name == "clear_shelf_item":
         profile = get_profile()
         if not profile:
             return {"error": "No profile"}
         remove_from_shelf(profile["id"], inputs["topic"])
+        log.info(f"shelf cleared: {inputs['topic'][:60]}")
         return {"status": "cleared", "topic": inputs["topic"]}
 
     elif name == "save_alert":
@@ -870,6 +879,7 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         )
         if not channel:
             return {"error": f"No channel matching '{inputs['name']}' in home server"}
+        log.info(f"read #{channel.name}")
         limit = min(int(inputs.get("limit", 20)), 50)
         msgs = []
         async for msg in channel.history(limit=limit, oldest_first=False):
@@ -979,6 +989,7 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
             return {"error": str(e)}
 
     elif name == "read_file":
+        log.info(f"read file: {inputs['path']}")
         try:
             from pathlib import Path as _Path
             trinity_root = _Path(__file__).parent.parent.resolve()
@@ -1091,9 +1102,10 @@ Hourly window — roughly 20 minutes. Use web_search sparingly."""
     summaries     = get_recent_summaries(profile["id"])
     system_blocks = build_system_blocks(profile, format_summaries(summaries), [], discord_mode=True)
 
+    log.info(f"── autonomous cycle ── {now_str} | shelf: {len(shelf)} | last seen: {last_seen_str}")
     try:
         await _call_trinity(system_blocks, [{"role": "user", "content": context}], profile["id"], retry=False, background=True)
-        log.info(f"Autonomous cycle complete ({now_str})")
+        log.info(f"── cycle complete ──")
     except Exception as e:
         log.error(f"Autonomous loop: {e}")
     finally:
