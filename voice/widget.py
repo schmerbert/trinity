@@ -1222,6 +1222,7 @@ class TrinityWidget(QMainWindow):
         text = self.input_field.text().strip()
         if not text:
             return
+        self._stop_tts()
         self.input_field.clear()
 
         if hasattr(self, '_awaiting_name') and self._awaiting_name:
