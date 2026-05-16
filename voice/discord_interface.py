@@ -24,6 +24,9 @@ from brain.memory import (
     pop_discord_writes
 )
 from brain.prompts import build_prompt, parse_prompt_tags, save_trinity_prompt
+from brain.logger import get_logger
+
+log = get_logger("DISCORD")
 from eyes.scraper import score_relevance, generate_hash
 
 # ─── Supabase setup (add this table in your SQL editor) ──────────────────────
@@ -253,16 +256,14 @@ DISCORD_TOOLS = [
 
 @bot.event
 async def on_ready():
-    print(f"[Discord] Online as {bot.user}")
+    log.info(f"Online as {bot.user}")
     await _load_watched_channels()
     await _post_pending_alerts()
     autonomous_loop.change_interval(minutes=AUTONOMOUS_MINUTES)
     autonomous_loop.start()
-    print(f"[Discord] Autonomous loop started — every {AUTONOMOUS_MINUTES} min")
+    log.info(f"Autonomous loop every {AUTONOMOUS_MINUTES} min | Eyes every 2 min | Thought drain every 30s")
     eyes_monitor.start()
-    print(f"[Discord] Eyes monitor started — evaluating signals every 2 min")
     thought_drain.start()
-    print(f"[Discord] Thought drain started — routing widget thoughts every 30s")
 
 
 @bot.event
@@ -314,7 +315,7 @@ async def _load_watched_channels():
             .execute()
         _watched_channels.clear()
         _watched_channels.update(int(r["channel_id"]) for r in (result.data or []))
-        print(f"[Discord] Watching {len(_watched_channels)} channel(s)")
+        log.info(f"Watching {len(_watched_channels)} channel(s)")
     except Exception as e:
         print(f"[Discord] Could not load watched channels: {e}")
 
@@ -596,7 +597,7 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         if not profile:
             return {"error": "No profile"}
         queue_thought(profile["id"], inputs["thought"], inputs.get("context", ""))
-        print(f"[Discord] Trinity queued for user: {inputs['thought'][:60]}")
+        log.info(f"Queued for user: {inputs['thought'][:60]}")
         return {"status": "queued", "thought": inputs["thought"]}
 
     elif name == "shelf_thought":
@@ -636,7 +637,7 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         }
         alert["content_hash"] = generate_hash(alert)
         save_alert(alert)
-        print(f"[Discord] Trinity flagged alert: {inputs['headline'][:60]}")
+        log.info(f"Alert saved [{urgency}]: {inputs['headline'][:60]}")
         return {"status": "saved", "headline": inputs["headline"]}
 
     elif name == "write_prompt":
@@ -649,7 +650,7 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
             inputs["content"],
             inputs.get("trigger", "")
         )
-        print(f"[Discord] Trinity wrote prompt: {inputs['name']}")
+        log.info(f"Prompt written: {inputs['name']}")
         return {"status": "saved", "name": inputs["name"]}
 
     elif name == "get_my_prompts":
@@ -676,7 +677,7 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
                 .eq("profile_id", profile["id"])\
                 .eq("name", inputs["name"])\
                 .execute()
-            print(f"[Discord] Trinity retired prompt: {inputs['name']}")
+            log.info(f"Prompt retired: {inputs['name']}")
             return {"status": "deleted", "name": inputs["name"]}
         except Exception as e:
             return {"error": str(e)}
@@ -692,7 +693,7 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         icon     = icons.get(category, "🔖")
         ts       = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
         await channel.send(f"{icon} **{category.upper()}** — {ts}\n{inputs['content']}")
-        print(f"[Discord] Trinity logged {category}: {inputs['content'][:60]}")
+        log.info(f"Log [{category}]: {inputs['content'][:60]}")
         return {"status": "logged", "category": category}
 
     return {"error": f"Unknown tool: {name}"}
@@ -740,9 +741,9 @@ Radar: {interest_str}"""
 
     try:
         await _call_trinity(prompt, [{"role": "user", "content": context}], profile["id"], retry=False, background=True)
-        print(f"[Discord] Autonomous check-in complete ({now})")
+        log.info(f"Autonomous check-in complete ({now})")
     except Exception as e:
-        print(f"[Discord] Autonomous loop error: {e}")
+        log.error(f"Autonomous loop: {e}")
 
 @autonomous_loop.before_loop
 async def before_autonomous():
@@ -776,7 +777,7 @@ async def eyes_monitor():
         if not alerts:
             return
 
-        print(f"[Eyes] {len(alerts)} new signal(s) — Trinity evaluating")
+        log.info(f"{len(alerts)} new signal(s) — evaluating")
         lines = "\n".join(
             f"- [{a['source']}] {a['headline']} (score {a['relevance_score']:.1f})"
             for a in alerts
@@ -797,7 +798,7 @@ Evaluate each. If any are genuinely significant — actionable, time-sensitive, 
         await _call_trinity(prompt, [{"role": "user", "content": context}], profile["id"], retry=False, background=True)
 
     except Exception as e:
-        print(f"[Eyes] Monitor error: {e}")
+        log.error(f"Eyes monitor: {e}")
 
 
 @eyes_monitor.before_loop
@@ -862,10 +863,10 @@ async def _call_trinity_inner(prompt: str, messages: list, profile_id: str, retr
         except Exception as e:
             if "rate_limit" in str(e).lower() or "429" in str(e):
                 if not retry:
-                    print(f"[Discord] Rate limited — skipping background call")
+                    log.warn("Rate limited — skipping background call")
                     return ""
                 wait = min(60 * (2 ** retries), 300)
-                print(f"[Discord] Rate limited — retrying in {wait}s")
+                log.warn(f"Rate limited — retrying in {wait}s")
                 await asyncio.sleep(wait)
                 retries += 1
                 continue
@@ -967,7 +968,7 @@ async def _handle_reaction(message: discord.Message, emoji: str):
         sentiment = "positive"  # absurdist reactions (🍆 etc) = engagement = positive
 
     add_feedback(profile["id"], first_line, sentiment)
-    print(f"[Discord] Reaction {emoji} on '{first_line[:40]}' → {sentiment}")
+    log.debug(f"Reaction {emoji} → {sentiment} on '{first_line[:40]}'")
 
 
 # ─── Memory parsing ───────────────────────────────────────────────────────────

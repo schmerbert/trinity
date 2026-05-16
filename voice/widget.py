@@ -28,6 +28,9 @@ load_dotenv(dotenv_path=env_path)
 
 import anthropic
 from brain.prompts import build_prompt, parse_prompt_tags
+from brain.logger import get_logger
+
+log = get_logger("WIDGET")
 
 try:
     from voice.extensions.scratchpad import ScratchpadPanel
@@ -456,6 +459,7 @@ class TrinityWidget(QMainWindow):
                 opening += "\n\nBrief me naturally."
 
             update_last_seen(self.profile["id"])
+            log.info(f"Startup — profile: {self.profile.get('name', '?')} | alerts: {len(unseen)} | queued: {len(queued)}")
             self._last_input = opening
             self._ask_trinity(opening)
             self._alert_poll.start()
@@ -541,6 +545,7 @@ class TrinityWidget(QMainWindow):
         self.history.append({"role": "assistant", "content": clean})
 
         self._log("trinity", clean)
+        log.info(f"Response ({len(clean)} chars){' [scratch]' if self._scratchpad and self._scratchpad._visible else ''}")
         self._display(clean)
         self.wave.set_state("idle")
         self.status_label.setText("watching")
@@ -556,6 +561,7 @@ class TrinityWidget(QMainWindow):
             threading.Thread(target=self._speak, args=(spoken,), daemon=True).start()
 
     def _on_error(self, msg):
+        log.error(f"API: {msg[:120]}")
         self._display(msg)
         self.wave.set_state("idle")
         self.status_label.setText("watching")
@@ -631,11 +637,12 @@ class TrinityWidget(QMainWindow):
         if not self._scratchpad or "<scratch>" not in reply:
             return reply
         parts = re.split(r'<scratch>(.*?)</scratch>', reply, flags=re.DOTALL)
-        clean = parts[0].strip()
+        # Even indices are text segments, odd indices are scratch content
+        text_parts = [parts[i].strip() for i in range(0, len(parts), 2) if parts[i].strip()]
+        clean = "\n\n".join(text_parts)
         for i in range(1, len(parts), 2):
             content = parts[i].strip()
             if content:
-                # Separator so consecutive writes don't run together
                 if self._scratchpad._text.toPlainText():
                     self._scratchpad.write_trinity("\n─\n")
                 self._scratchpad.write_trinity(content)

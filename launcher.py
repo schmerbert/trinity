@@ -11,6 +11,14 @@ PYW   = VENV / "pythonw.exe"
 def launch():
     procs = []
 
+    # Open log viewer in a separate console window
+    subprocess.Popen(
+        ["powershell", "-NoExit", "-ExecutionPolicy", "Bypass",
+         "-File", str(ROOT / "log_viewer.ps1")],
+        cwd=str(ROOT),
+        creationflags=subprocess.CREATE_NEW_CONSOLE
+    )
+
     eyes = subprocess.Popen(
         [str(PYW), str(ROOT / "eyes" / "scraper.py")],
         cwd=str(ROOT)

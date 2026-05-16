@@ -97,6 +97,7 @@ class ScratchpadPanel(QWidget):
             Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setFixedSize(WIDTH, HEIGHT)
         self._build_ui()
 
