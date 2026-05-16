@@ -94,6 +94,7 @@ delete_event(title) — remove an event by title.
 Surfacing
 save_alert(headline, topic, summary?, url?, urgency?) — flag something. urgency="high" wakes the widget immediately.
 queue_for_user(thought, context?) — surface something next time the user opens the widget. Not urgent.
+send_email(subject, body) — send an email directly to the user. Use ONLY when: (1) something time-sensitive is happening right now, (2) a specific named trigger condition they've already indicated they care about has been hit, and (3) no other channel will reach them in time. The bar is intentionally high — noise erodes the signal.
 
 Palace
 read_discord_channel(name) — read your palace channels by name.
@@ -153,6 +154,7 @@ delete_event(title) — remove an event by title.
 Surfacing
 save_alert(headline, topic, summary?, url?, urgency?) — flag something. urgency="high" wakes the widget immediately.
 queue_for_user(thought, context?) — surface something next time the user opens the widget.
+send_email(subject, body) — send an email directly to the user. Use ONLY when: (1) something time-sensitive is happening right now, (2) a specific named trigger condition they've already indicated they care about has been hit, and (3) no other channel will reach them in time. The bar is intentionally high — noise erodes the signal.
 
 Self
 write_prompt(name, content, trigger?, category?) — write a rule that persists to all future sessions. category: identity (always loads) | task | relationship | memory | general.

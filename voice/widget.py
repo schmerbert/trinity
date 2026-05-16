@@ -77,6 +77,7 @@ def _fmt_widget_tool(name: str, inputs: dict) -> str:
         "read_discord_channel": lambda i: f"#{i.get('name','')}",
         "write_scratchpad":  lambda i: i.get("content", "")[:60],
         "note_for_claude":   lambda i: f"[{i.get('tag','')}] {i.get('message','')[:50]}",
+        "send_email":        lambda i: f"to user — {i.get('subject','')[:50]}",
     }
     detail = key_fields.get(name, lambda i: "")(inputs)
     return f"{name}({detail})" if detail else name
@@ -369,6 +370,23 @@ WIDGET_TOOLS = [
                 "tag":     {"type": "string", "description": "Category: bug | request | question | observation", "enum": ["bug", "request", "question", "observation"]}
             },
             "required": ["message", "tag"]
+        }
+    },
+    {
+        "name": "send_email",
+        "description": (
+            "Send an email to the user. Use ONLY when: (1) something time-sensitive is happening right now, "
+            "(2) a specific named trigger condition the user has already indicated they care about has been hit, "
+            "and (3) no other channel is likely to reach them in time. "
+            "Not for general updates or check-ins. The bar is intentionally high — noise erodes the signal."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "subject": {"type": "string", "description": "Email subject line"},
+                "body":    {"type": "string", "description": "Email body — be specific about what happened and why it warrants interruption"}
+            },
+            "required": ["subject", "body"]
         }
     },
     {
@@ -671,6 +689,33 @@ class TrinityWorker(QThread):
                 log.info(f"Note for Claude [{tag}]: {inputs['message'][:60]}")
                 return {"status": "noted"}
             except Exception as e:
+                return {"error": str(e)}
+
+        elif name == "send_email":
+            try:
+                import smtplib
+                from email.mime.text import MIMEText
+                from email.mime.multipart import MIMEMultipart
+                smtp_host  = os.getenv("SMTP_HOST", "smtp.gmail.com")
+                smtp_port  = int(os.getenv("SMTP_PORT", "587"))
+                smtp_user  = os.getenv("SMTP_USER", "")
+                smtp_pass  = os.getenv("SMTP_PASS", "")
+                user_email = os.getenv("TRINITY_USER_EMAIL", "")
+                if not all([smtp_user, smtp_pass, user_email]):
+                    return {"error": "Email not configured — set SMTP_USER, SMTP_PASS, TRINITY_USER_EMAIL in .env"}
+                msg = MIMEMultipart()
+                msg["From"]    = smtp_user
+                msg["To"]      = user_email
+                msg["Subject"] = inputs["subject"]
+                msg.attach(MIMEText(inputs["body"], "plain"))
+                with smtplib.SMTP(smtp_host, smtp_port) as server:
+                    server.starttls()
+                    server.login(smtp_user, smtp_pass)
+                    server.send_message(msg)
+                log.info(f"✉ email sent: {inputs['subject'][:60]}")
+                return {"status": "sent", "to": user_email}
+            except Exception as e:
+                log.error(f"send_email failed: {e}")
                 return {"error": str(e)}
 
         elif name == "get_changelog":

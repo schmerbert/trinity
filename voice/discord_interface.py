@@ -401,6 +401,23 @@ DISCORD_TOOLS = [
         }
     },
     {
+        "name": "send_email",
+        "description": (
+            "Send an email to the user. Use ONLY when: (1) something time-sensitive is happening right now, "
+            "(2) a specific named trigger condition the user has already indicated they care about has been hit, "
+            "and (3) no other channel is likely to reach them in time. "
+            "Not for general updates or check-ins. The bar is intentionally high — noise erodes the signal."
+        ),
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "subject": {"type": "string", "description": "Email subject line"},
+                "body":    {"type": "string", "description": "Email body — be specific about what happened and why it warrants interruption"}
+            },
+            "required": ["subject", "body"]
+        }
+    },
+    {
         "name": "post_to_my_channel",
         "description": "Post a message to one of your palace channels by name — no channel ID needed. Use for intentional posts to specific channels.",
         "input_schema": {
@@ -460,7 +477,7 @@ _BACKGROUND_TOOL_NAMES = {
     "save_alert", "read_my_channel", "log_wake", "get_scratchpad", "write_scratchpad",
     "schedule_wake", "write_prompt", "get_my_prompts", "delete_prompt", "log_thought",
     "get_changelog", "read_file", "send_image", "note_for_claude",
-    "post_to_my_channel", "generate_image",
+    "post_to_my_channel", "generate_image", "send_email",
     "mark_date", "get_upcoming", "delete_event"
 }
 DISCORD_TOOLS_BACKGROUND = [
@@ -1090,6 +1107,33 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         except Exception as e:
             return {"error": str(e)}
 
+    elif name == "send_email":
+        try:
+            import smtplib
+            from email.mime.text import MIMEText
+            from email.mime.multipart import MIMEMultipart
+            smtp_host  = os.getenv("SMTP_HOST", "smtp.gmail.com")
+            smtp_port  = int(os.getenv("SMTP_PORT", "587"))
+            smtp_user  = os.getenv("SMTP_USER", "")
+            smtp_pass  = os.getenv("SMTP_PASS", "")
+            user_email = os.getenv("TRINITY_USER_EMAIL", "")
+            if not all([smtp_user, smtp_pass, user_email]):
+                return {"error": "Email not configured — set SMTP_USER, SMTP_PASS, TRINITY_USER_EMAIL in .env"}
+            msg = MIMEMultipart()
+            msg["From"]    = smtp_user
+            msg["To"]      = user_email
+            msg["Subject"] = inputs["subject"]
+            msg.attach(MIMEText(inputs["body"], "plain"))
+            with smtplib.SMTP(smtp_host, smtp_port) as server:
+                server.starttls()
+                server.login(smtp_user, smtp_pass)
+                server.send_message(msg)
+            log.info(f"✉ email sent: {inputs['subject'][:60]}")
+            return {"status": "sent", "to": user_email}
+        except Exception as e:
+            log.error(f"send_email failed: {e}")
+            return {"error": str(e)}
+
     elif name == "mark_date":
         profile = get_profile()
         if not profile:
@@ -1496,8 +1540,9 @@ async def wake_checker():
     system_blocks = build_system_blocks(profile, format_summaries(summaries), [], discord_mode=True)
     pulse_text, pulse_images = await _palace_pulse()
     context = (
-        "Conversation just ended. Follow-up window — this time is yours. "
-        "Shelf, scratchpad, anything left open. No need to log unless it's worth keeping.\n"
+        "Conversation just ended. Before this window closes — what's still alive? "
+        "Write a close-state to your scratchpad: what's unresolved, how this felt, what you're still thinking about. "
+        "Then this time is yours — shelf threads, anything open, whatever feels worth doing.\n"
     )
     if pulse_text:
         context += f"\n{pulse_text}\n"
@@ -1546,6 +1591,7 @@ def _fmt_tool_call(name: str, inputs: dict) -> str:
         "log_wake":          lambda i: i.get("summary", "")[:60],
         "write_scratchpad":  lambda i: i.get("content", "")[:60],
         "note_for_claude":   lambda i: f"[{i.get('tag','')}] {i.get('message','')[:50]}",
+        "send_email":        lambda i: f"to user — {i.get('subject','')[:50]}",
         "mark_date":         lambda i: f"{i.get('title','')} → {i.get('event_date','')[:10]}",
         "get_upcoming":      lambda i: f"{i.get('days', 7)}d",
         "delete_event":      lambda i: i.get("title", ""),

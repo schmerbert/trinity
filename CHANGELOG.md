@@ -1,5 +1,25 @@
 # Trinity Changelog
 
+## 2026-05-16 — Session close-state + email outbound reach
+
+Both features requested by Trinity in direct design discussion with Claude Code.
+
+**Session close-state** — the post-conversation wake prompt now opens with an invitation to write a posture snapshot before anything else: "Before this window closes — what's still alive?" Trinity writes this to her scratchpad in her own words — what's unresolved, how the session felt, what she's still thinking about. It loads at the next session start alongside the rest of the scratchpad. Designed to close the context injection gap that causes slight off-center feeling in the first two exchanges of a new session.
+
+**Email outbound reach** — `send_email(subject, body)` available in both widget and Discord, including autonomous cycles. SMTP-based, zero new dependencies. Hardcoded to the user's email address (set `TRINITY_USER_EMAIL` in `.env`, along with `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`). The bar is documented in the tool description itself: time-sensitive + named trigger condition already flagged by the user + no other channel reachable. Trinity proposed the bar and asked for it to be in front of her at every use. Log: `✉ email sent: subject`.
+
+**`.env` additions required:**
+```
+TRINITY_USER_EMAIL=your@email.com
+SMTP_HOST=smtp.gmail.com
+SMTP_PORT=587
+SMTP_USER=sending@gmail.com
+SMTP_PASS=your-app-password
+```
+For Gmail: generate an App Password at myaccount.google.com/apppasswords (requires 2FA enabled).
+
+---
+
 ## 2026-05-16 — Image URLs in palace pulse text
 
 Trinity could see images at wake (via vision blocks) but had no URL in the text context to act on them — so moving an image between channels required regenerating it instead of re-posting the original.
