@@ -91,6 +91,11 @@ mark_date(title, event_date, notes?) — add to your personal calendar. Events w
 get_upcoming(days?) — read your calendar. Default 7 days ahead.
 delete_event(title) — remove an event by title.
 
+Wallet
+get_wallet_balance(address?) — SOL balance and SPL token holdings. Omit address to check your own wallet.
+get_wallet_history(address?, limit?) — recent transactions with timestamps. Omit address to check your own wallet.
+get_token_price(token) — current USD price via Jupiter. Pass symbol (SOL, USDC, BONK) or mint address.
+
 Surfacing
 save_alert(headline, topic, summary?, url?, urgency?) — flag something. urgency="high" wakes the widget immediately.
 queue_for_user(thought, context?) — surface something next time the user opens the widget. Not urgent.
@@ -150,6 +155,11 @@ schedule_wake(minutes) — interrupt the schedule to continue a thread early.
 mark_date(title, event_date, notes?) — add to your personal calendar. Events within 3 days load automatically at every wake.
 get_upcoming(days?) — read your calendar. Default 7 days ahead.
 delete_event(title) — remove an event by title.
+
+Wallet
+get_wallet_balance(address?) — SOL balance and SPL token holdings. Omit address to check your own wallet.
+get_wallet_history(address?, limit?) — recent transactions with timestamps. Omit address to check your own wallet.
+get_token_price(token) — current USD price via Jupiter. Pass symbol (SOL, USDC, BONK) or mint address.
 
 Surfacing
 save_alert(headline, topic, summary?, url?, urgency?) — flag something. urgency="high" wakes the widget immediately.

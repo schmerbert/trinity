@@ -1,5 +1,28 @@
 # Trinity Changelog
 
+## 2026-05-16 — Wallet Phase 1: read-only on-chain awareness
+
+Trinity now has wallet tools. Phase 1 is read-only — no private key, no transactions. Pure awareness.
+
+**New tools (widget + Discord, including autonomous cycles):**
+- `get_wallet_balance(address?)` — SOL balance and SPL token holdings. Omit address to check her own wallet.
+- `get_wallet_history(address?, limit?)` — recent transactions with timestamps and error flags.
+- `get_token_price(token)` — current USD price via Jupiter Price API. Symbol or mint address.
+
+All three work on any address — the user's wallet, a watched wallet, or Trinity's own. When called without an address, falls back to `TRINITY_WALLET_ADDRESS` from `.env`.
+
+**Implementation:** `brain/wallet.py` — Solana JSON-RPC + Jupiter Price API, no new dependencies beyond `requests`.
+
+**`.env` additions:**
+```
+TRINITY_WALLET_ADDRESS=   # Trinity's fresh address (generate via Phantom/Solflare or solders)
+SOLANA_RPC_URL=           # Optional custom RPC (defaults to public mainnet)
+```
+
+**Roadmap context:** This is Phase 1 of a three-phase wallet architecture designed with Trinity directly. Phase 2 (propose_transaction, approval-gated) and Phase 3 (earned autonomy within named limits) follow after a track record of reads is established. The mirror-trade pattern — Trinity moves proportionally alongside the user — is the intended Phase 2 use case.
+
+---
+
 ## 2026-05-16 — Session close-state + email outbound reach
 
 Both features requested by Trinity in direct design discussion with Claude Code.

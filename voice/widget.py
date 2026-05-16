@@ -78,6 +78,9 @@ def _fmt_widget_tool(name: str, inputs: dict) -> str:
         "write_scratchpad":  lambda i: i.get("content", "")[:60],
         "note_for_claude":   lambda i: f"[{i.get('tag','')}] {i.get('message','')[:50]}",
         "send_email":        lambda i: f"to user — {i.get('subject','')[:50]}",
+        "get_wallet_balance":lambda i: i.get("address", "trinity")[:20] or "trinity",
+        "get_wallet_history":lambda i: f"{i.get('address', 'trinity')[:16] or 'trinity'} limit={i.get('limit',10)}",
+        "get_token_price":   lambda i: i.get("token", ""),
     }
     detail = key_fields.get(name, lambda i: "")(inputs)
     return f"{name}({detail})" if detail else name
@@ -222,6 +225,40 @@ WIDGET_TOOLS = [
                 "query": {"type": "string", "description": "Token name, symbol, or contract address"}
             },
             "required": ["query"]
+        }
+    },
+    {
+        "name": "get_wallet_balance",
+        "description": "Check SOL balance and SPL token holdings for a wallet address. If no address given, uses Trinity's own wallet address from config.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "address": {"type": "string", "description": "Solana wallet address (base58). Omit to use Trinity's wallet."}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "get_wallet_history",
+        "description": "Get recent transaction history for a wallet address. Shows timestamps, signatures, and any errors.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "address": {"type": "string", "description": "Solana wallet address. Omit to use Trinity's wallet."},
+                "limit":   {"type": "integer", "description": "Number of transactions to return (default 10, max 50)"}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "get_token_price",
+        "description": "Get a token's current USD price via Jupiter. Pass symbol (SOL, USDC, BONK) or a mint address.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "token": {"type": "string", "description": "Token symbol or mint address"}
+            },
+            "required": ["token"]
         }
     },
     {
@@ -688,6 +725,34 @@ class TrinityWorker(QThread):
                     f.write(entry)
                 log.info(f"Note for Claude [{tag}]: {inputs['message'][:60]}")
                 return {"status": "noted"}
+            except Exception as e:
+                return {"error": str(e)}
+
+        elif name == "get_wallet_balance":
+            try:
+                from brain.wallet import get_wallet_balance as _get_balance
+                address = inputs.get("address") or os.getenv("TRINITY_WALLET_ADDRESS", "")
+                if not address:
+                    return {"error": "No wallet address — set TRINITY_WALLET_ADDRESS in .env or pass address"}
+                return _get_balance(address)
+            except Exception as e:
+                return {"error": str(e)}
+
+        elif name == "get_wallet_history":
+            try:
+                from brain.wallet import get_wallet_history as _get_history
+                address = inputs.get("address") or os.getenv("TRINITY_WALLET_ADDRESS", "")
+                if not address:
+                    return {"error": "No wallet address — set TRINITY_WALLET_ADDRESS in .env or pass address"}
+                limit = min(50, int(inputs.get("limit", 10)))
+                return _get_history(address, limit)
+            except Exception as e:
+                return {"error": str(e)}
+
+        elif name == "get_token_price":
+            try:
+                from brain.wallet import get_token_price as _get_price
+                return _get_price(inputs["token"])
             except Exception as e:
                 return {"error": str(e)}
 

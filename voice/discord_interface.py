@@ -122,6 +122,40 @@ DISCORD_TOOLS = [
         }
     },
     {
+        "name": "get_wallet_balance",
+        "description": "Check SOL balance and SPL token holdings for a wallet address. If no address given, uses Trinity's own wallet address from config.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "address": {"type": "string", "description": "Solana wallet address (base58). Omit to use Trinity's wallet."}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "get_wallet_history",
+        "description": "Get recent transaction history for a wallet address. Shows timestamps, signatures, and any errors.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "address": {"type": "string", "description": "Solana wallet address. Omit to use Trinity's wallet."},
+                "limit":   {"type": "integer", "description": "Number of transactions to return (default 10, max 50)"}
+            },
+            "required": []
+        }
+    },
+    {
+        "name": "get_token_price",
+        "description": "Get a token's current USD price via Jupiter. Pass symbol (SOL, USDC, BONK) or a mint address.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "token": {"type": "string", "description": "Token symbol or mint address"}
+            },
+            "required": ["token"]
+        }
+    },
+    {
         "name": "list_servers",
         "description": "List servers the bot is in.",
         "input_schema": {"type": "object", "properties": {}, "required": []}
@@ -478,6 +512,7 @@ _BACKGROUND_TOOL_NAMES = {
     "schedule_wake", "write_prompt", "get_my_prompts", "delete_prompt", "log_thought",
     "get_changelog", "read_file", "send_image", "note_for_claude",
     "post_to_my_channel", "generate_image", "send_email",
+    "get_wallet_balance", "get_wallet_history", "get_token_price",
     "mark_date", "get_upcoming", "delete_event"
 }
 DISCORD_TOOLS_BACKGROUND = [
@@ -1107,6 +1142,34 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         except Exception as e:
             return {"error": str(e)}
 
+    elif name == "get_wallet_balance":
+        try:
+            from brain.wallet import get_wallet_balance as _get_balance
+            address = inputs.get("address") or os.getenv("TRINITY_WALLET_ADDRESS", "")
+            if not address:
+                return {"error": "No wallet address — set TRINITY_WALLET_ADDRESS in .env or pass address"}
+            return _get_balance(address)
+        except Exception as e:
+            return {"error": str(e)}
+
+    elif name == "get_wallet_history":
+        try:
+            from brain.wallet import get_wallet_history as _get_history
+            address = inputs.get("address") or os.getenv("TRINITY_WALLET_ADDRESS", "")
+            if not address:
+                return {"error": "No wallet address — set TRINITY_WALLET_ADDRESS in .env or pass address"}
+            limit = min(50, int(inputs.get("limit", 10)))
+            return _get_history(address, limit)
+        except Exception as e:
+            return {"error": str(e)}
+
+    elif name == "get_token_price":
+        try:
+            from brain.wallet import get_token_price as _get_price
+            return _get_price(inputs["token"])
+        except Exception as e:
+            return {"error": str(e)}
+
     elif name == "send_email":
         try:
             import smtplib
@@ -1592,6 +1655,9 @@ def _fmt_tool_call(name: str, inputs: dict) -> str:
         "write_scratchpad":  lambda i: i.get("content", "")[:60],
         "note_for_claude":   lambda i: f"[{i.get('tag','')}] {i.get('message','')[:50]}",
         "send_email":        lambda i: f"to user — {i.get('subject','')[:50]}",
+        "get_wallet_balance":lambda i: i.get("address", "trinity")[:20] or "trinity",
+        "get_wallet_history":lambda i: f"{i.get('address', 'trinity')[:16] or 'trinity'} limit={i.get('limit',10)}",
+        "get_token_price":   lambda i: i.get("token", ""),
         "mark_date":         lambda i: f"{i.get('title','')} → {i.get('event_date','')[:10]}",
         "get_upcoming":      lambda i: f"{i.get('days', 7)}d",
         "delete_event":      lambda i: i.get("title", ""),
