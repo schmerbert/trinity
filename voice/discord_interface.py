@@ -21,7 +21,8 @@ from brain.memory import (
     get_recent_summaries, add_interest, add_feedback, update_profile,
     get_shelf, add_to_shelf, remove_from_shelf,
     get_queued_thoughts, queue_thought, clear_queued_thoughts,
-    pop_discord_writes
+    pop_discord_writes, log_wake_cycle, get_wake_history,
+    get_scratchpad, save_scratchpad
 )
 from brain.prompts import build_prompt, parse_prompt_tags, save_trinity_prompt
 from brain.logger import get_logger
@@ -203,6 +204,55 @@ DISCORD_TOOLS = [
                 "urgency":  {"type": "string", "enum": ["normal", "high"], "default": "normal"}
             },
             "required": ["headline", "topic"]
+        }
+    },
+    {
+        "name": "read_my_channel",
+        "description": "Read messages from one of your own palace channels by name. Use this to review what you've written or what's been posted — no need to look up the channel ID first.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name":  {"type": "string", "description": "Channel name — partial, case-insensitive match"},
+                "limit": {"type": "integer", "description": "Messages to fetch (default 20, max 50)"}
+            },
+            "required": ["name"]
+        }
+    },
+    {
+        "name": "log_wake",
+        "description": "Leave a note for your future self about this wake cycle. Loads automatically at the top of your next wake. Use it when you've touched something worth continuing — a thread, a realization, a question left open.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string", "description": "What you want future-you to know"},
+                "topics":  {"type": "array", "items": {"type": "string"}, "description": "Topics touched this cycle"}
+            },
+            "required": ["summary"]
+        }
+    },
+    {
+        "name": "get_scratchpad",
+        "description": "Read your persistent scratchpad — carries between sessions and across both interfaces.",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
+        "name": "write_scratchpad",
+        "description": "Update your persistent scratchpad. This is your canonical working surface — it loads in the widget next session.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"content": {"type": "string"}},
+            "required": ["content"]
+        }
+    },
+    {
+        "name": "schedule_wake",
+        "description": "Schedule an early wake cycle. Use when you're mid-thread and want to continue in N minutes rather than waiting for the default interval. Resets to default after firing.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "minutes": {"type": "integer", "description": "Minutes until next wake (1–240)"}
+            },
+            "required": ["minutes"]
         }
     },
     {
@@ -640,6 +690,57 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         log.info(f"Alert saved [{urgency}]: {inputs['headline'][:60]}")
         return {"status": "saved", "headline": inputs["headline"]}
 
+    elif name == "read_my_channel":
+        guild = _home_guild()
+        if not guild:
+            return {"error": "No home server set — use set_home_server first"}
+        query = inputs["name"].lower().replace("-", "").replace("_", "").replace(" ", "")
+        channel = next(
+            (c for c in guild.channels
+             if isinstance(c, discord.TextChannel)
+             and query in c.name.lower().replace("-", "").replace("_", "")),
+            None
+        )
+        if not channel:
+            return {"error": f"No channel matching '{inputs['name']}' in home server"}
+        limit = min(int(inputs.get("limit", 20)), 50)
+        msgs = []
+        async for msg in channel.history(limit=limit, oldest_first=False):
+            msgs.append({
+                "author":    str(msg.author.display_name),
+                "content":   msg.content,
+                "timestamp": msg.created_at.isoformat()
+            })
+        return msgs
+
+    elif name == "log_wake":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        log_wake_cycle(profile["id"], inputs["summary"], inputs.get("topics", []))
+        log.info(f"Wake logged: {inputs['summary'][:60]}")
+        return {"status": "logged"}
+
+    elif name == "get_scratchpad":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        return {"content": get_scratchpad(profile["id"])}
+
+    elif name == "write_scratchpad":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        save_scratchpad(profile["id"], inputs["content"])
+        log.info(f"Scratchpad updated ({len(inputs['content'])} chars)")
+        return {"status": "saved"}
+
+    elif name == "schedule_wake":
+        minutes = max(1, min(int(inputs.get("minutes", 30)), 240))
+        autonomous_loop.change_interval(minutes=minutes)
+        log.info(f"Early wake scheduled in {minutes} min")
+        return {"status": "scheduled", "minutes": minutes}
+
     elif name == "write_prompt":
         profile = get_profile()
         if not profile:
@@ -725,11 +826,18 @@ async def autonomous_loop():
         except Exception:
             last_seen_str = raw_last_seen[:16]
 
+    wake_history = get_wake_history(profile["id"], limit=3)
+    wake_str = ""
+    if wake_history:
+        wake_str = "\n\nYour recent wake notes:\n" + "\n".join(
+            f"- [{w['at'][:16]}] {w['summary']}" for w in wake_history
+        )
+
     context = f"""{now}
 
 User last seen: {last_seen_str}
 Shelf: {shelf_str}
-Radar: {interest_str}"""
+Radar: {interest_str}{wake_str}"""
 
     summaries    = get_recent_summaries(profile["id"])
     summary_text = json.dumps(summaries, indent=2) if summaries else "No previous conversations yet."
@@ -744,6 +852,8 @@ Radar: {interest_str}"""
         log.info(f"Autonomous check-in complete ({now})")
     except Exception as e:
         log.error(f"Autonomous loop: {e}")
+    finally:
+        autonomous_loop.change_interval(minutes=AUTONOMOUS_MINUTES)
 
 @autonomous_loop.before_loop
 async def before_autonomous():

@@ -42,7 +42,7 @@ from brain.memory import (
     add_interest, add_feedback, save_conversation_summary,
     get_recent_summaries, get_unseen_alerts, mark_alerts_seen,
     process_feedback, get_queued_thoughts, clear_queued_thoughts,
-    push_discord_write, update_last_seen
+    push_discord_write, update_last_seen, get_scratchpad, save_scratchpad
 )
 
 # --- Colors ---
@@ -460,6 +460,10 @@ class TrinityWidget(QMainWindow):
 
             update_last_seen(self.profile["id"])
             log.info(f"Startup — profile: {self.profile.get('name', '?')} | alerts: {len(unseen)} | queued: {len(queued)}")
+            if _SCRATCHPAD and self._scratchpad:
+                saved = get_scratchpad(self.profile["id"])
+                if saved:
+                    self._scratchpad._text.setPlainText(saved)
             self._last_input = opening
             self._ask_trinity(opening)
             self._alert_poll.start()
@@ -817,6 +821,8 @@ class TrinityWidget(QMainWindow):
             self.activateWindow()
 
     def _quit(self):
+        if self.profile and _SCRATCHPAD and self._scratchpad:
+            save_scratchpad(self.profile["id"], self._scratchpad._text.toPlainText())
         if self.profile and len(self.history) > 2:
             self._summarize()
         QApplication.quit()

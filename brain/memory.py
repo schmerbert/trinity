@@ -200,3 +200,34 @@ def pop_discord_writes(profile_id):
     if writes:
         update_profile(profile_id, {"pending_discord_writes": []})
     return writes
+
+# ─── Wake cycle log — Trinity's notes to her future self ─────────────────────
+#
+# alter table profiles add column if not exists wake_history jsonb default '[]';
+#
+def log_wake_cycle(profile_id, summary, topics=None):
+    from datetime import datetime
+    profile = get_profile()
+    history = profile.get("wake_history") or []
+    history.append({
+        "at":      datetime.utcnow().isoformat(),
+        "summary": summary,
+        "topics":  topics or []
+    })
+    return update_profile(profile_id, {"wake_history": history[-10:]})
+
+def get_wake_history(profile_id, limit=3):
+    profile = get_profile()
+    history = profile.get("wake_history") or []
+    return history[-limit:]
+
+# ─── Persistent scratchpad ────────────────────────────────────────────────────
+#
+# alter table profiles add column if not exists scratchpad_text text default '';
+#
+def get_scratchpad(profile_id):
+    profile = get_profile()
+    return profile.get("scratchpad_text") or ""
+
+def save_scratchpad(profile_id, text):
+    return update_profile(profile_id, {"scratchpad_text": text})
