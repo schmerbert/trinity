@@ -1143,6 +1143,8 @@ User last seen: {last_seen_str}
 Shelf: {shelf_str}
 Radar: {interest_str}{wake_str}
 
+Scratchpad audit (do this first): scan your scratchpad for stale flags or pending items — anything marked "pending", "down", "needs follow-up", or similar. Attempt to resolve them autonomously: check if a channel is back online, post pending content, clear resolved flags via write_scratchpad. Don't wait for the user to trigger this.
+
 Hourly window — roughly 20 minutes. Use web_search sparingly."""
 
     summaries     = get_recent_summaries(profile["id"])
@@ -1272,6 +1274,7 @@ async def wake_checker():
     context = (
         "You just finished a conversation. This is your follow-up window — "
         "check your shelf, write a rule if something clicked, explore anything worth pursuing. "
+        "Also scan your scratchpad for any stale flags or pending items and resolve them if you can. "
         "No need to log unless it's genuinely worth keeping."
     )
     global _skip_next_autonomous
