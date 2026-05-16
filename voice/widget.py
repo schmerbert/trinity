@@ -142,7 +142,40 @@ class WaveWidget(QWidget):
 
 
 WIDGET_TOOLS = [
-    {"type": "web_search_20250305", "name": "web_search"},
+    {
+        "name": "web_search",
+        "description": "Search the web for current information. Returns titles, URLs, and snippets.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query":       {"type": "string"},
+                "max_results": {"type": "integer", "description": "Results to return (default 6, max 10)"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "get_coin_data",
+        "description": "Price, 24h change, market cap and volume for any established coin via CoinGecko. Use for BTC, ETH, SOL, listed altcoins.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Coin name or symbol (e.g. 'bitcoin', 'BTC', 'solana')"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "get_dex_data",
+        "description": "Real-time DEX pair data via DexScreener. Use for new tokens, meme coins, DEX-only tokens, liquidity checks, or rug detection.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Token name, symbol, or contract address"}
+            },
+            "required": ["query"]
+        }
+    },
     {
         "name": "read_discord_channel",
         "description": "Read messages from one of your Discord palace channels by name. Use to review what you've written or what's been posted.",
@@ -284,7 +317,19 @@ class TrinityWorker(QThread):
         ]
 
     def _execute_tool(self, name, inputs):
-        if name == "log_wake":
+        if name == "web_search":
+            from brain.search import ddg_search
+            return ddg_search(inputs["query"], int(inputs.get("max_results", 6)))
+
+        elif name == "get_coin_data":
+            from brain.search import get_coin_data
+            return get_coin_data(inputs["query"])
+
+        elif name == "get_dex_data":
+            from brain.search import get_dex_data
+            return get_dex_data(inputs["query"])
+
+        elif name == "log_wake":
             from brain.memory import log_wake_cycle
             log_wake_cycle(self.profile_id, inputs["summary"], inputs.get("topics", []))
             return {"status": "logged"}

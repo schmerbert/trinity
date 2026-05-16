@@ -75,7 +75,40 @@ _skip_next_autonomous: bool      = False
 _VIS = {"type": "string", "enum": ["public", "owner_only", "trinity_only"]}
 
 DISCORD_TOOLS = [
-    {"type": "web_search_20250305", "name": "web_search"},
+    {
+        "name": "web_search",
+        "description": "Search the web for current information. Returns titles, URLs, and snippets.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query":       {"type": "string"},
+                "max_results": {"type": "integer", "description": "Results to return (default 6, max 10)"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "get_coin_data",
+        "description": "Price, 24h change, market cap and volume for any established coin via CoinGecko. Use for BTC, ETH, SOL, listed altcoins.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Coin name or symbol (e.g. 'bitcoin', 'BTC', 'solana')"}
+            },
+            "required": ["query"]
+        }
+    },
+    {
+        "name": "get_dex_data",
+        "description": "Real-time DEX pair data via DexScreener. Use for new tokens, meme coins, DEX-only tokens, liquidity checks, or rug detection.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Token name, symbol, or contract address"}
+            },
+            "required": ["query"]
+        }
+    },
     {
         "name": "list_servers",
         "description": "List servers the bot is in.",
@@ -305,13 +338,13 @@ DISCORD_TOOLS = [
 ]
 
 _BACKGROUND_TOOL_NAMES = {
-    "web_search", "queue_for_user", "shelf_thought", "get_shelf", "clear_shelf_item",
+    "web_search", "get_coin_data", "get_dex_data",
+    "queue_for_user", "shelf_thought", "get_shelf", "clear_shelf_item",
     "save_alert", "read_my_channel", "log_wake", "get_scratchpad", "write_scratchpad",
     "schedule_wake", "write_prompt", "get_my_prompts", "delete_prompt", "log_thought"
 }
 DISCORD_TOOLS_BACKGROUND = [
-    t for t in DISCORD_TOOLS
-    if t.get("name") in _BACKGROUND_TOOL_NAMES or t.get("type") == "web_search_20250305"
+    t for t in DISCORD_TOOLS if t.get("name") in _BACKGROUND_TOOL_NAMES
 ]
 
 # ─── Events ──────────────────────────────────────────────────────────────────
@@ -474,7 +507,19 @@ def _home_guild() -> discord.Guild | None:
 # ─── Tool execution ───────────────────────────────────────────────────────────
 
 async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list:
-    if name == "list_servers":
+    if name == "web_search":
+        from brain.search import ddg_search
+        return ddg_search(inputs["query"], int(inputs.get("max_results", 6)))
+
+    elif name == "get_coin_data":
+        from brain.search import get_coin_data
+        return get_coin_data(inputs["query"])
+
+    elif name == "get_dex_data":
+        from brain.search import get_dex_data
+        return get_dex_data(inputs["query"])
+
+    elif name == "list_servers":
         return [
             {"id": str(g.id), "name": g.name, "member_count": g.member_count,
              "text_channels": len([c for c in g.channels if isinstance(c, discord.TextChannel)])}
