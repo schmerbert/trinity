@@ -66,6 +66,21 @@ def _strip_for_tts(text):
     text = _MD_STRIP.sub('', text)
     return re.sub(r'\s+', ' ', text).strip()
 
+def _split_sentences(text):
+    parts = re.split(r'(?<=[.!?])\s+(?=[A-Z"\'\(])', text.strip())
+    merged, buf = [], ""
+    for p in parts:
+        buf = (buf + " " + p).strip() if buf else p
+        if len(buf) >= 40:
+            merged.append(buf)
+            buf = ""
+    if buf:
+        if merged:
+            merged[-1] = (merged[-1] + " " + buf).strip()
+        else:
+            merged.append(buf)
+    return merged or [text]
+
 
 # --- Wave Widget ---
 class WaveWidget(QWidget):
@@ -636,6 +651,8 @@ class TrinityWorker(QThread):
 
 # --- Main Widget ---
 class TrinityWidget(QMainWindow):
+    sentence_spoken = pyqtSignal(str)
+
     def __init__(self):
         super().__init__()
         self.drag_pos      = None
@@ -658,6 +675,7 @@ class TrinityWidget(QMainWindow):
         self._scratchpad = ScratchpadPanel(self) if _SCRATCHPAD else None
         self._init_log()
         self._init_tts()
+        self.sentence_spoken.connect(self._on_sentence_spoken)
 
         # Idle collapse timer — hides response area after inactivity
         self._idle_timer = QTimer()
@@ -1019,19 +1037,24 @@ class TrinityWidget(QMainWindow):
             request_wake(self.profile["id"])
         except Exception:
             pass
-        self._display(clean)
         self.wave.set_state("idle")
         self.status_label.setText("watching")
         self.input_field.setEnabled(True)
         self.input_field.setFocus()
-
         self._idle_timer.start()
 
-        if self.tts_enabled:
+        if self.tts_enabled and self._kokoro is not None:
+            self.response_area.clear()
             self._tts_stop = False
             self._tts_active = True
-            spoken = _strip_for_tts(clean)
-            threading.Thread(target=self._speak, args=(spoken,), daemon=True).start()
+            threading.Thread(target=self._speak_chunked, args=(clean,), daemon=True).start()
+        else:
+            self._display(clean)
+            if self.tts_enabled:
+                self._tts_stop = False
+                self._tts_active = True
+                spoken = _strip_for_tts(clean)
+                threading.Thread(target=self._speak, args=(spoken,), daemon=True).start()
 
     def _on_error(self, msg):
         log.error(f"API: {msg[:120]}")
@@ -1166,6 +1189,81 @@ class TrinityWidget(QMainWindow):
             except Exception as e:
                 log.warn(f"Kokoro TTS unavailable: {e}")
         threading.Thread(target=_load, daemon=True).start()
+
+    def _on_sentence_spoken(self, sentence):
+        from PyQt6.QtGui import QTextCursor
+        cursor = self.response_area.textCursor()
+        cursor.movePosition(QTextCursor.MoveOperation.End)
+        self.response_area.setTextCursor(cursor)
+        self.response_area.insertPlainText(sentence)
+        self.response_area.verticalScrollBar().setValue(
+            self.response_area.verticalScrollBar().maximum()
+        )
+
+    def _generate_audio(self, tts_text):
+        import numpy as np, wave, tempfile
+        samples, sample_rate = self._kokoro.create(
+            tts_text, voice=self._tts_voice, speed=1.0, lang="en-us"
+        )
+        samples_i16 = (np.clip(samples, -1.0, 1.0) * 32767).astype(np.int16)
+        with tempfile.NamedTemporaryFile(suffix=".wav", delete=False) as f:
+            tmp = f.name
+        with wave.open(tmp, "wb") as wf:
+            wf.setnchannels(1)
+            wf.setsampwidth(2)
+            wf.setframerate(sample_rate)
+            wf.writeframes(samples_i16.tobytes())
+        return tmp
+
+    def _speak_chunked(self, clean_text):
+        import pygame
+        from concurrent.futures import ThreadPoolExecutor
+        try:
+            sentences = _split_sentences(clean_text)
+            pairs = [(s + " ", _strip_for_tts(s)) for s in sentences if _strip_for_tts(s).strip()]
+            if not pairs:
+                self.sentence_spoken.emit(clean_text)
+                return
+
+            with ThreadPoolExecutor(max_workers=1) as ex:
+                future = ex.submit(self._generate_audio, pairs[0][1])
+
+                for i, (display_s, _) in enumerate(pairs):
+                    if self._tts_stop:
+                        self.sentence_spoken.emit("".join(d for d, _ in pairs[i:]))
+                        return
+
+                    tmp = future.result()
+
+                    if i + 1 < len(pairs):
+                        future = ex.submit(self._generate_audio, pairs[i + 1][1])
+
+                    self.sentence_spoken.emit(display_s)
+
+                    pygame.mixer.music.load(tmp)
+                    pygame.mixer.music.play()
+                    while pygame.mixer.music.get_busy():
+                        if self._tts_stop:
+                            pygame.mixer.music.stop()
+                            break
+                        time.sleep(0.05)
+
+                    try:
+                        os.unlink(tmp)
+                    except Exception:
+                        pass
+
+                    if self._tts_stop:
+                        remaining = "".join(d for d, _ in pairs[i + 1:])
+                        if remaining:
+                            self.sentence_spoken.emit(remaining)
+                        return
+
+        except Exception as e:
+            log.warn(f"TTS chunked: {e}")
+            self.sentence_spoken.emit(clean_text)
+        finally:
+            self._tts_active = False
 
     def _speak(self, text):
         try:
