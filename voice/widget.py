@@ -27,7 +27,7 @@ env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
 
 import anthropic
-from brain.prompts import build_prompt, parse_prompt_tags
+from brain.prompts import build_system_blocks, build_prompt, parse_prompt_tags
 from brain.logger import get_logger
 
 log = get_logger("WIDGET")
@@ -190,16 +190,15 @@ class TrinityWorker(QThread):
     error_signal     = pyqtSignal(str)
     scratchpad_write = pyqtSignal(str)
 
-    def __init__(self, client, prompt, history, profile_id):
+    def __init__(self, client, system_blocks, history, profile_id):
         super().__init__()
-        self.client     = client
-        self.prompt     = prompt
-        self.history    = history
-        self.profile_id = profile_id
+        self.client        = client
+        self.system_blocks = system_blocks
+        self.history       = history
+        self.profile_id    = profile_id
 
     def run(self):
-        messages      = list(self.history)
-        cached_system = [{"type": "text", "text": self.prompt, "cache_control": {"type": "ephemeral"}}]
+        messages = list(self.history)
 
         for attempt in range(3):
             try:
@@ -208,7 +207,7 @@ class TrinityWorker(QThread):
                 with self.client.messages.stream(
                     model="claude-sonnet-4-6",
                     max_tokens=1000,
-                    system=cached_system,
+                    system=self.system_blocks,
                     messages=messages,
                     tools=WIDGET_TOOLS
                 ) as stream:
@@ -228,7 +227,7 @@ class TrinityWorker(QThread):
                         response = self.client.messages.create(
                             model="claude-sonnet-4-6",
                             max_tokens=1000,
-                            system=cached_system,
+                            system=self.system_blocks,
                             messages=messages,
                             tools=WIDGET_TOOLS
                         )
@@ -674,15 +673,15 @@ class TrinityWidget(QMainWindow):
         self.input_field.setEnabled(False)
         self._stream_buffer = ""
 
-        extensions = ["scratchpad"] if _SCRATCHPAD else []
-        prompt   = build_prompt(self.profile, self.summary_text, self.history, extensions=extensions)
+        extensions    = ["scratchpad"] if _SCRATCHPAD else []
+        system_blocks = build_system_blocks(self.profile, self.summary_text, self.history, extensions=extensions)
         if _SCRATCHPAD and self._scratchpad:
             pad_text = self._scratchpad._text.toPlainText().strip()
             if pad_text:
-                prompt += f"\n\nYour current scratchpad:\n{pad_text}"
+                system_blocks[-1]["text"] += f"\n\nYour current scratchpad:\n{pad_text}"
         messages = self.history + [{"role": "user", "content": user_text}]
 
-        self.worker = TrinityWorker(self.client, prompt, messages, self.profile["id"])
+        self.worker = TrinityWorker(self.client, system_blocks, messages, self.profile["id"])
         self.worker.chunk_ready.connect(self._on_chunk)
         self.worker.response_done.connect(self._on_response)
         self.worker.error_signal.connect(self._on_error)

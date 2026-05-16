@@ -61,16 +61,10 @@ When you have findings, brief like you've already read everything and are giving
 When referencing a source, include the URL inline. Never disclaim that you can't access data.
 Learn his language, shorthand, and terminology. Use it back naturally. Ask once if something's unclear, never again.
 
-Current user profile:
-{profile}
-
-Recent conversation summaries:
-{summaries}
-
 Extract memory signals after each message, wrapped in <memory> tags:
-- {{"type": "interest", "topic": "...", "weight": 1.0}}
-- {{"type": "feedback", "topic": "...", "sentiment": "positive/negative/neutral"}}
-- {{"type": "risk", "value": "low/medium/high"}}
+- {"type": "interest", "topic": "...", "weight": 1.0}
+- {"type": "feedback", "topic": "...", "sentiment": "positive/negative/neutral"}
+- {"type": "risk", "value": "low/medium/high"}
 - High engagement: weight 1.5. Crypto token: add category and symbol.
 Only when there's a real signal. Raw JSON, one per line. No signal — no tags.
 
@@ -126,26 +120,44 @@ Use your tools proactively. When someone messages you, feel free to search, chec
 """
 
 
-def build_prompt(profile, summary_text, recent_messages=None, discord_mode=False, extensions=None):
-    base = TRINITY_BASE.format(profile=profile, summaries=summary_text)
-    parts = [base]
+def build_system_blocks(profile, summary_text, recent_messages=None, discord_mode=False, extensions=None):
+    """Returns [static_cached_block, dynamic_uncached_block] for the API system parameter."""
+    static_parts = [TRINITY_BASE]
     if discord_mode:
-        parts.append(DISCORD_CONTEXT)
+        static_parts.append(DISCORD_CONTEXT)
     else:
         cap = WIDGET_CAPABILITIES
         if extensions and "scratchpad" in extensions:
             cap += SCRATCHPAD_CAPABILITY
-        parts.append(cap)
+        static_parts.append(cap)
 
     modules = _get_active_modules(recent_messages or [], profile)
     for m in modules:
-        parts.append(f"[{m['name'].upper()} CONTEXT]\n{m['content']}")
+        static_parts.append(f"[{m['name'].upper()} CONTEXT]\n{m['content']}")
 
     rules = _get_trinity_prompts(profile["id"], recent_messages or [])
     for r in rules:
-        parts.append(r["content"])
+        static_parts.append(r["content"])
 
-    return "\n\n".join(parts)
+    interests = profile.get("interests") or []
+    top_interests = sorted(interests, key=lambda x: -x.get("weight", 1.0))[:12]
+    interest_str = ", ".join(i["topic"] for i in top_interests) if top_interests else "none yet"
+    dynamic = (
+        f"User: {profile.get('name', 'unknown')} | "
+        f"Risk: {profile.get('risk_tolerance', 'not set')} | "
+        f"Interests: {interest_str}\n\n"
+        f"Recent conversation summaries:\n{summary_text}"
+    )
+
+    return [
+        {"type": "text", "text": "\n\n".join(static_parts), "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": dynamic}
+    ]
+
+
+def build_prompt(profile, summary_text, recent_messages=None, discord_mode=False, extensions=None):
+    blocks = build_system_blocks(profile, summary_text, recent_messages, discord_mode, extensions)
+    return "\n\n".join(b["text"] for b in blocks)
 
 
 def parse_prompt_tags(reply, profile_id):

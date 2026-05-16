@@ -24,7 +24,7 @@ from brain.memory import (
     pop_discord_writes, log_wake_cycle, get_wake_history,
     get_scratchpad, save_scratchpad
 )
-from brain.prompts import build_prompt, parse_prompt_tags, save_trinity_prompt
+from brain.prompts import build_system_blocks, build_prompt, parse_prompt_tags, save_trinity_prompt
 from brain.logger import get_logger
 
 log = get_logger("DISCORD")
@@ -54,7 +54,7 @@ supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
 OWNER_ID           = os.getenv("DISCORD_OWNER_ID", "")
 OWNER_ID           = int(OWNER_ID) if OWNER_ID.isdigit() else 0
-AUTONOMOUS_MINUTES = int(os.getenv("DISCORD_AUTONOMOUS_INTERVAL", "30"))
+AUTONOMOUS_MINUTES = int(os.getenv("DISCORD_AUTONOMOUS_INTERVAL", "60"))
 _LOG_CHANNEL_ID    = int(os.getenv("TRINITY_LOG_CHANNEL_ID",     "0") or "0")
 _THOUGHT_CHANNEL_ID = int(os.getenv("TRINITY_THOUGHT_CHANNEL_ID", "0") or "0")
 _HOME_GUILD_ID_ENV  = os.getenv("DISCORD_HOME_GUILD_ID", "")
@@ -817,12 +817,12 @@ async def _startup_brief():
         return
     summaries    = get_recent_summaries(profile["id"])
     summary_text = json.dumps(summaries, indent=2) if summaries else "No previous conversations yet."
-    prompt       = build_prompt(profile, summary_text, [], discord_mode=True)
+    system_blocks = build_system_blocks(profile, summary_text, [], discord_mode=True)
     context      = "You just came online. Quick orientation — check anything you want, get your bearings. No need to log this one."
     if _api_lock.locked():
         return
     try:
-        await _call_trinity(prompt, [{"role": "user", "content": context}], profile["id"], retry=False, background=True)
+        await _call_trinity(system_blocks, [{"role": "user", "content": context}], profile["id"], retry=False, background=True)
         log.info("Startup brief complete")
     except Exception as e:
         log.error(f"Startup brief: {e}")
@@ -870,14 +870,14 @@ Radar: {interest_str}{wake_str}"""
 
     summaries    = get_recent_summaries(profile["id"])
     summary_text = json.dumps(summaries, indent=2) if summaries else "No previous conversations yet."
-    prompt       = build_prompt(profile, summary_text, [], discord_mode=True)
+    system_blocks = build_system_blocks(profile, summary_text, [], discord_mode=True)
 
     if _api_lock.locked():
         print(f"[Discord] Autonomous loop skipped — API busy ({now})")
         return
 
     try:
-        await _call_trinity(prompt, [{"role": "user", "content": context}], profile["id"], retry=False, background=True)
+        await _call_trinity(system_blocks, [{"role": "user", "content": context}], profile["id"], retry=False, background=True)
         log.info(f"Autonomous check-in complete ({now})")
     except Exception as e:
         log.error(f"Autonomous loop: {e}")
@@ -931,10 +931,10 @@ Evaluate each. If any are genuinely significant — actionable, time-sensitive, 
             print("[Eyes] API busy — skipping evaluation")
             return
 
-        summaries    = get_recent_summaries(profile["id"])
-        summary_text = json.dumps(summaries, indent=2) if summaries else ""
-        prompt       = build_prompt(profile, summary_text, [], discord_mode=True)
-        await _call_trinity(prompt, [{"role": "user", "content": context}], profile["id"], retry=False, background=True)
+        summaries     = get_recent_summaries(profile["id"])
+        summary_text  = json.dumps(summaries, indent=2) if summaries else ""
+        system_blocks = build_system_blocks(profile, summary_text, [], discord_mode=True)
+        await _call_trinity(system_blocks, [{"role": "user", "content": context}], profile["id"], retry=False, background=True)
 
     except Exception as e:
         log.error(f"Eyes monitor: {e}")
@@ -970,18 +970,18 @@ async def before_thought_drain():
 
 # ─── Agentic response loop ────────────────────────────────────────────────────
 
-async def _call_trinity(prompt: str, messages: list, profile_id: str, retry: bool = True, background: bool = False) -> str:
+async def _call_trinity(system_blocks: list, messages: list, profile_id: str, retry: bool = True, background: bool = False) -> str:
     async with _api_lock:
-        return await _call_trinity_inner(prompt, messages, profile_id, retry=retry, background=background)
+        return await _call_trinity_inner(system_blocks, messages, profile_id, retry=retry, background=background)
 
 
-async def _call_trinity_inner(prompt: str, messages: list, profile_id: str, retry: bool = True, background: bool = False) -> str:
+async def _call_trinity_inner(system_blocks: list, messages: list, profile_id: str, retry: bool = True, background: bool = False) -> str:
     loop = asyncio.get_event_loop()
-    retries = 0
-    model        = "claude-haiku-4-5-20251001" if background else "claude-sonnet-4-6"
-    max_iters    = 8 if background else 20
-    iters        = 0
-    cached_system = [{"type": "text", "text": prompt, "cache_control": {"type": "ephemeral"}}]
+    retries   = 0
+    model     = "claude-haiku-4-5-20251001" if background else "claude-sonnet-4-6"
+    max_iters = 4 if background else 12
+    max_tok   = 600 if background else 1000
+    iters     = 0
 
     while True:
         if iters >= max_iters:
@@ -992,8 +992,8 @@ async def _call_trinity_inner(prompt: str, messages: list, profile_id: str, retr
                 None,
                 lambda msgs=messages, m=model: ai_client.messages.create(
                     model=m,
-                    max_tokens=1000,
-                    system=cached_system,
+                    max_tokens=max_tok,
+                    system=system_blocks,
                     messages=msgs,
                     tools=DISCORD_TOOLS
                 )
@@ -1056,10 +1056,10 @@ async def _respond(message: discord.Message):
         await message.reply("No profile found — open Trinity on desktop first.")
         return
 
-    summaries    = get_recent_summaries(profile["id"])
-    summary_text = json.dumps(summaries, indent=2) if summaries else "No previous conversations yet."
-    prompt       = build_prompt(profile, summary_text, history, discord_mode=True)
-    api_messages = history + [{"role": "user", "content": user_text}]
+    summaries     = get_recent_summaries(profile["id"])
+    summary_text  = json.dumps(summaries, indent=2) if summaries else "No previous conversations yet."
+    system_blocks = build_system_blocks(profile, summary_text, history, discord_mode=True)
+    api_messages  = history + [{"role": "user", "content": user_text}]
 
     async def keep_typing():
         while True:
@@ -1068,7 +1068,7 @@ async def _respond(message: discord.Message):
 
     typing_task = asyncio.create_task(keep_typing())
     try:
-        full_reply = await _call_trinity(prompt, api_messages, profile["id"])
+        full_reply = await _call_trinity(system_blocks, api_messages, profile["id"])
     except Exception as e:
         await message.reply(f"Something went wrong: {e}")
         return
