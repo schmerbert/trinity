@@ -1,5 +1,15 @@
 # Trinity Changelog
 
+## 2026-05-16 — Silent in-widget alerts
+
+**No more OS popups** — tray balloon notifications are gone. They were spawning a blank window on click and interrupting focus. All alert info was already loading into the sidebar findings panel; the popup was redundant.
+
+**Wave pulse as signal** — when new alerts arrive, the wave pulses amber for 6 seconds. That's the cue to open the sidebar and check findings. Urgent alerts keep the wave in urgent state and auto-respond as before.
+
+**Alerts no longer accumulate** — previously alerts were marked seen only on urgent checks, so the count kept growing. Now they're marked seen as soon as they load into the findings panel.
+
+---
+
 ## 2026-05-16 — TTS/text sync + sentence pipeline
 
 **Text and audio now in sync** — instead of the full response appearing all at once before TTS starts, text appears sentence by sentence in lockstep with speech. The widget fills as she speaks.
