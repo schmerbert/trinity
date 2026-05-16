@@ -543,6 +543,38 @@ def _build_overwrites(guild: discord.Guild, visibility: str) -> dict:
     return overwrites
 
 
+async def _read_history(channel, limit):
+    """Fetch channel history with one retry on transient 403."""
+    for attempt in range(2):
+        try:
+            msgs = []
+            async for msg in channel.history(limit=limit, oldest_first=False):
+                entry = {
+                    "author":    str(msg.author.display_name),
+                    "content":   msg.content,
+                    "timestamp": msg.created_at.isoformat()
+                }
+                if msg.attachments:
+                    entry["attachments"] = [
+                        {"url": a.url, "filename": a.filename, "type": a.content_type or ""}
+                        for a in msg.attachments
+                    ]
+                msgs.append(entry)
+            empty = sum(1 for m in msgs if not m["content"].strip())
+            if msgs:
+                log.info(f"read #{channel.name}: {len(msgs)} messages, {empty} with empty content")
+            return msgs
+        except discord.Forbidden as e:
+            if attempt == 0:
+                log.warn(f"read #{channel.name} 403 (attempt 1), retrying in 2s — code={e.code} full='{e}'")
+                await asyncio.sleep(2)
+            else:
+                log.error(f"read #{channel.name} 403 (attempt 2, giving up) — code={e.code} full='{e}'")
+                return {"error": f"403 {e}"}
+        except Exception as e:
+            log.error(f"read #{channel.name} error: {e}")
+            return {"error": str(e)}
+
 def _home_guild() -> discord.Guild | None:
     profile = get_profile()
     if not profile or not profile.get("discord_home_guild_id"):
@@ -641,30 +673,7 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
             return {"error": "Channel not found or no access"}
         log.info(f"read channel: #{channel.name if channel else inputs['channel_id']}")
         limit = min(int(inputs.get("limit", 25)), 50)
-        msgs = []
-        try:
-            async for msg in channel.history(limit=limit, oldest_first=False):
-                entry = {
-                    "author":    str(msg.author.display_name),
-                    "content":   msg.content,
-                    "timestamp": msg.created_at.isoformat()
-                }
-                if msg.attachments:
-                    entry["attachments"] = [
-                        {"url": a.url, "filename": a.filename, "type": a.content_type or ""}
-                        for a in msg.attachments
-                    ]
-                msgs.append(entry)
-        except discord.Forbidden as e:
-            log.error(f"read_channel 403 on #{channel.name} (id={channel.id}): code={e.code} text='{e.text}' full='{e}'")
-            return {"error": f"403 {e}"}
-        except Exception as e:
-            log.error(f"read_channel error on #{channel.name}: {e}")
-            return {"error": str(e)}
-        empty_content = sum(1 for m in msgs if not m["content"].strip())
-        if msgs:
-            log.info(f"read #{channel.name}: {len(msgs)} messages, {empty_content} with empty content")
-        return msgs
+        return await _read_history(channel, limit)
 
     elif name == "send_message":
         channel = bot.get_channel(int(inputs["channel_id"]))
@@ -895,30 +904,7 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
             return {"error": f"No channel matching '{inputs['name']}' in home server"}
         log.info(f"read #{channel.name}")
         limit = min(int(inputs.get("limit", 20)), 50)
-        msgs = []
-        try:
-            async for msg in channel.history(limit=limit, oldest_first=False):
-                entry = {
-                    "author":    str(msg.author.display_name),
-                    "content":   msg.content,
-                    "timestamp": msg.created_at.isoformat()
-                }
-                if msg.attachments:
-                    entry["attachments"] = [
-                        {"url": a.url, "filename": a.filename, "type": a.content_type or ""}
-                        for a in msg.attachments
-                    ]
-                msgs.append(entry)
-        except discord.Forbidden as e:
-            log.error(f"read_my_channel 403 on #{channel.name} (id={channel.id}): code={e.code} text='{e.text}' full='{e}'")
-            return {"error": f"403 {e}"}
-        except Exception as e:
-            log.error(f"read_my_channel error on #{channel.name}: {e}")
-            return {"error": str(e)}
-        empty_content = sum(1 for m in msgs if not m["content"].strip())
-        if msgs:
-            log.info(f"read #{channel.name}: {len(msgs)} messages, {empty_content} with empty content")
-        return msgs
+        return await _read_history(channel, limit)
 
     elif name == "log_wake":
         profile = get_profile()
