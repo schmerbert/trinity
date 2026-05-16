@@ -1,5 +1,15 @@
 # Trinity Changelog
 
+## 2026-05-16 — Palace pulse at wake
+
+**Trinity now arrives informed.** At the start of every autonomous cycle and every post-conversation wake, `_palace_pulse()` pre-reads her watched channels and thought channel and injects recent messages directly into the cycle context — before the first API call. No tool call needed. She wakes up already knowing what's been posted.
+
+Previously: wake context contained shelf, interests, scratchpad, and wake notes — but no Discord channel content. She had to be told to read channels, or ask what was there.
+
+Now: the wake prompt includes `Palace (recent activity):` with the last ~12 messages per watched/thought channel, in chronological order, formatted as `[MM-DD HH:MM] author: content`.
+
+---
+
 ## 2026-05-16 — Timing, direct channel write, image generation
 
 Three gaps Trinity identified in CLAUDE_NOTES.md are now closed:

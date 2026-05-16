@@ -1165,6 +1165,59 @@ async def _startup_brief():
         log.error(f"Startup brief: {e}")
 
 
+# ─── Palace pulse — pre-read channels at wake ────────────────────────────────
+
+async def _palace_pulse(limit_per_channel: int = 12) -> str:
+    """Read watched channels + thought channel before a wake cycle.
+    Returns a formatted block injected into the cycle context so Trinity
+    arrives already knowing what's there — no tool call required."""
+    sections = []
+    seen_ids = set()
+
+    async def _read_channel_block(channel) -> str | None:
+        if channel is None or channel.id in seen_ids:
+            return None
+        seen_ids.add(channel.id)
+        try:
+            msgs = []
+            async for m in channel.history(limit=limit_per_channel, oldest_first=False):
+                if m.author.bot and m.author.id == bot.user.id:
+                    author = "Trinity"
+                else:
+                    author = m.author.display_name
+                ts = m.created_at.strftime("%m-%d %H:%M")
+                content = (m.content or "").replace("\n", " ")[:180]
+                if content:
+                    msgs.append(f"  [{ts}] {author}: {content}")
+            if not msgs:
+                return None
+            msgs.reverse()  # chronological order
+            return f"#{channel.name}:\n" + "\n".join(msgs)
+        except discord.Forbidden:
+            return None
+        except Exception as e:
+            log.warn(f"palace_pulse #{channel.name}: {e}")
+            return None
+
+    # Thought channel
+    if _THOUGHT_CHANNEL_ID:
+        ch = bot.get_channel(_THOUGHT_CHANNEL_ID)
+        block = await _read_channel_block(ch)
+        if block:
+            sections.append(block)
+
+    # Watched channels
+    for ch_id in list(_watched_channels):
+        ch = bot.get_channel(ch_id)
+        block = await _read_channel_block(ch)
+        if block:
+            sections.append(block)
+
+    if not sections:
+        return ""
+    return "Palace (recent activity):\n" + "\n\n".join(sections)
+
+
 # ─── Autonomous loop ─────────────────────────────────────────────────────────
 
 @tasks.loop(minutes=60)
@@ -1218,13 +1271,19 @@ async def autonomous_loop():
             f"- [{w['at'][:16]}] {w['summary']}" for w in wake_history
         )
 
+    pulse = await _palace_pulse()
+
     context = f"""{now_str}
 
 User last seen: {last_seen_str}
 Shelf: {shelf_str}
 Radar: {interest_str}{wake_str}
+"""
+    if pulse:
+        context += f"\n{pulse}\n"
 
-Scratchpad audit (do this first): scan your scratchpad for stale flags or pending items — anything marked "pending", "down", "needs follow-up", or similar. Attempt to resolve them autonomously: check if a channel is back online, post pending content, clear resolved flags via write_scratchpad. Don't wait for the user to trigger this.
+    context += """
+Scratchpad audit: scan your scratchpad for stale flags or pending items — anything marked "pending", "down", "needs follow-up". Resolve autonomously where you can.
 
 Hourly window — roughly 20 minutes. Use web_search sparingly."""
 
@@ -1352,12 +1411,14 @@ async def wake_checker():
         return
     summaries     = get_recent_summaries(profile["id"])
     system_blocks = build_system_blocks(profile, format_summaries(summaries), [], discord_mode=True)
+    pulse = await _palace_pulse()
     context = (
         "You just finished a conversation. This is your follow-up window — "
         "check your shelf, write a rule if something clicked, explore anything worth pursuing. "
-        "Also scan your scratchpad for any stale flags or pending items and resolve them if you can. "
-        "No need to log unless it's genuinely worth keeping."
+        "Scan your scratchpad for stale flags and resolve what you can.\n"
     )
+    if pulse:
+        context += f"\n{pulse}\n"
     global _skip_next_autonomous
     _skip_next_autonomous = True
     try:
