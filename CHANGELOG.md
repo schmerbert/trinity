@@ -1,5 +1,23 @@
 # Trinity Changelog
 
+## 2026-05-16 — Live activity panel in widget
+
+A `◎` button in the widget header opens a live activity panel below the response area. It tails the Trinity log file in real time (1-second poll) and displays filtered autonomous cycle activity as it happens — no restart needed.
+
+**What appears:**
+- `── autonomous cycle ──` start and end markers
+- `→ tool_name(args)` — every tool call as it fires
+- `◆ interest / feedback` — memory signals as they're extracted
+- `[pulse] #channel: N messages` — palace reads at wake
+- `[feeds] / [watches]` — RSS and keyword match events
+- `← done (N tool calls)` — cycle summary
+
+Startup noise, HTTP retries, and internal bookkeeping are filtered out. Panel stays dark and minimal — same visual language as the rest of the widget. Capped at 120 lines; auto-scrolls to the bottom as new lines arrive. Always advances the file position even when hidden, so toggling on shows only fresh activity.
+
+The button highlights blue when active. Panel sits between the response area and the findings sidebar — both can be open at the same time.
+
+---
+
 ## 2026-05-16 — RSS live feed + keyword watches + event-driven waking
 
 The trigger is now the world, not just the clock.

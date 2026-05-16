@@ -61,6 +61,20 @@ IDLE_COLLAPSE_MS = 90_000
 
 _MD_STRIP = re.compile(r'\*{1,2}|_{1,2}|`+|#{1,6}\s*|>\s*|^\s*[-•]\s*', re.MULTILINE)
 
+# Activity log filter — lines containing any KEEP token are shown; SKIP wins if both match
+_ACTIVITY_KEEP = (
+    '──', '→ ', '◆ ', '[pulse]', '[feeds]', '[watches]',
+    '← done', '← reply', 'Post-conversation', 'Bridge wake',
+    'Startup brief', 'Wake logged', 'Alert saved', 'email sent',
+    'Prompt written', 'Image posted', 'calendar', 'watch set', 'watch cleared',
+)
+_ACTIVITY_SKIP = (
+    'seeded', 'Watching ', 'Home guild', 'loop every', 'loop align',
+    'Online as', 'thought_drain', 'Eyes monitor',
+    'Could not', 'could not',
+)
+_LOG_LINE_RE = re.compile(r'\[(\d{2}:\d{2}):\d{2}\] \[\w+\s*\] \[\w+\s*\] (.+)')
+
 def _fmt_widget_tool(name: str, inputs: dict) -> str:
     key_fields = {
         "web_search":        lambda i: i.get("query", "")[:60],
@@ -1049,6 +1063,7 @@ class TrinityWidget(QMainWindow):
         self._setup_tray()
         self._scratchpad = ScratchpadPanel(self) if _SCRATCHPAD else None
         self._init_log()
+        self._init_activity_log()
         self._init_tts()
         self.sentence_spoken.connect(self._on_sentence_spoken)
 
@@ -1073,6 +1088,13 @@ class TrinityWidget(QMainWindow):
         self._urgent_poll = QTimer()
         self._urgent_poll.setInterval(15_000)
         self._urgent_poll.timeout.connect(self._check_urgent_alerts)
+
+        # Live activity feed — tails trinity_*.log every second
+        self._activity_file_pos = 0
+        self._activity_visible  = False
+        self._log_poll = QTimer()
+        self._log_poll.setInterval(1000)
+        self._log_poll.timeout.connect(self._poll_activity_log)
 
         self._init_trinity()
 
@@ -1124,6 +1146,12 @@ class TrinityWidget(QMainWindow):
         self.stop_btn.setToolTip("Stop voice")
         self.stop_btn.clicked.connect(self._stop_tts)
 
+        self.activity_btn = QPushButton("◎")
+        self.activity_btn.setFixedSize(28, 28)
+        self.activity_btn.setStyleSheet(btn_style)
+        self.activity_btn.setToolTip("Live activity")
+        self.activity_btn.clicked.connect(self._toggle_activity)
+
         self.sidebar_btn = QPushButton("≡")
         self.sidebar_btn.setFixedSize(28, 28)
         self.sidebar_btn.setStyleSheet(btn_style)
@@ -1147,6 +1175,7 @@ class TrinityWidget(QMainWindow):
             header.addWidget(self.scratch_btn)
         header.addWidget(self.stop_btn)
         header.addWidget(self.voice_btn)
+        header.addWidget(self.activity_btn)
         header.addWidget(self.sidebar_btn)
         header.addWidget(close_btn)
         layout.addLayout(header)
@@ -1172,6 +1201,38 @@ class TrinityWidget(QMainWindow):
             QScrollBar::handle:vertical { background: rgb(40,100,180); border-radius: 2px; }
         """)
         layout.addWidget(self.response_area)
+
+        # Activity panel — live autonomous cycle feed (hidden by default, toggle with ◎)
+        self.activity_panel = QWidget()
+        self.activity_panel.setVisible(False)
+        act_layout = QVBoxLayout(self.activity_panel)
+        act_layout.setContentsMargins(0, 2, 0, 0)
+        act_layout.setSpacing(2)
+
+        act_label = QLabel("— live —")
+        act_label.setFont(QFont("Courier New", 8))
+        act_label.setStyleSheet("color: rgb(30,70,110);")
+        act_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        act_layout.addWidget(act_label)
+
+        self.activity_area = QTextEdit()
+        self.activity_area.setReadOnly(True)
+        self.activity_area.setMaximumHeight(150)
+        self.activity_area.setMinimumHeight(60)
+        self.activity_area.setFont(QFont("Courier New", 9))
+        self.activity_area.setStyleSheet("""
+            QTextEdit {
+                background: rgba(4,8,16,200);
+                color: rgb(50,110,150);
+                border: 1px solid rgba(30,70,110,60);
+                border-radius: 4px;
+                padding: 4px;
+            }
+            QScrollBar:vertical { width: 3px; background: transparent; }
+            QScrollBar::handle:vertical { background: rgb(30,70,110); border-radius: 1px; }
+        """)
+        act_layout.addWidget(self.activity_area)
+        layout.addWidget(self.activity_panel)
 
         # Sidebar (hidden by default)
         self.sidebar = QWidget()
@@ -1471,6 +1532,60 @@ class TrinityWidget(QMainWindow):
         except Exception:
             pass
         return clean
+
+    # --- Live activity feed ---
+    def _init_activity_log(self):
+        """Seek to end of today's trinity log so we only tail new entries."""
+        from datetime import date
+        log_path = Path(__file__).parent.parent / "logs" / f"trinity_{date.today()}.log"
+        self._activity_file_pos = log_path.stat().st_size if log_path.exists() else 0
+        self._log_poll.start()
+
+    def _toggle_activity(self):
+        self._activity_visible = not self._activity_visible
+        self.activity_panel.setVisible(self._activity_visible)
+        dim = "rgb(80,180,255)" if self._activity_visible else "rgb(60,100,150)"
+        self.activity_btn.setStyleSheet(
+            f"QPushButton {{ background: transparent; color: {dim}; border: none; font-size: 14px; }}"
+            f" QPushButton:hover {{ color: rgb(80,180,255); }}"
+        )
+
+    def _poll_activity_log(self):
+        from datetime import date
+        log_path = Path(__file__).parent.parent / "logs" / f"trinity_{date.today()}.log"
+        if not log_path.exists():
+            return
+        try:
+            with open(log_path, "r", encoding="utf-8", errors="replace") as f:
+                f.seek(self._activity_file_pos)
+                new_data = f.read()
+                self._activity_file_pos = f.tell()
+            if not new_data or not self._activity_visible:
+                return
+            added = False
+            for line in new_data.splitlines():
+                m = _LOG_LINE_RE.match(line)
+                if not m:
+                    continue
+                ts, msg = m.group(1), m.group(2)
+                if any(s in msg for s in _ACTIVITY_SKIP):
+                    continue
+                if any(k in msg for k in _ACTIVITY_KEEP):
+                    self.activity_area.append(f"{ts} {msg}")
+                    added = True
+            if added:
+                doc = self.activity_area.document()
+                while doc.blockCount() > 120:
+                    cursor = self.activity_area.textCursor()
+                    cursor.movePosition(cursor.MoveOperation.Start)
+                    cursor.select(cursor.SelectionType.LineUnderCursor)
+                    cursor.removeSelectedText()
+                    cursor.deleteChar()
+                self.activity_area.verticalScrollBar().setValue(
+                    self.activity_area.verticalScrollBar().maximum()
+                )
+        except Exception:
+            pass
 
     # --- Conversation log ---
     def _init_log(self):
