@@ -213,6 +213,98 @@ WIDGET_TOOLS = [
             "properties": {"content": {"type": "string"}},
             "required": ["content"]
         }
+    },
+    {
+        "name": "shelf_thought",
+        "description": "Save a topic for deeper exploration during your next free cycle. Use when something is interesting but not the current focus.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "topic":   {"type": "string"},
+                "context": {"type": "string", "description": "Why it's interesting, what you want to explore"}
+            },
+            "required": ["topic"]
+        }
+    },
+    {
+        "name": "get_shelf",
+        "description": "Retrieve topics you've saved for future exploration.",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
+        "name": "clear_shelf_item",
+        "description": "Remove a topic from the shelf once explored or abandoned.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"topic": {"type": "string"}},
+            "required": ["topic"]
+        }
+    },
+    {
+        "name": "save_alert",
+        "description": "Flag something as worth surfacing to the user. urgency='high' triggers an immediate widget alert.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "headline": {"type": "string", "description": "One line summary"},
+                "topic":    {"type": "string"},
+                "summary":  {"type": "string"},
+                "url":      {"type": "string"},
+                "urgency":  {"type": "string", "enum": ["normal", "high"], "default": "normal"}
+            },
+            "required": ["headline", "topic"]
+        }
+    },
+    {
+        "name": "queue_for_user",
+        "description": "Queue something to surface next time the user opens the widget. Not urgent — just worth mentioning when they're around.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "thought": {"type": "string", "description": "What you want to surface"},
+                "context": {"type": "string", "description": "Why it's worth mentioning"}
+            },
+            "required": ["thought"]
+        }
+    },
+    {
+        "name": "write_prompt",
+        "description": "Write a rule for yourself that persists to all future sessions. Use to codify patterns, behavioral adjustments, or realizations worth keeping.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name":    {"type": "string", "description": "Unique kebab-case identifier"},
+                "content": {"type": "string", "description": "The rule — specific and actionable"},
+                "trigger": {"type": "string", "description": "Keyword to trigger this rule (empty = always active)"}
+            },
+            "required": ["name", "content"]
+        }
+    },
+    {
+        "name": "get_my_prompts",
+        "description": "Read back every rule you've written for yourself. Audit, notice conflicts, decide what to retire.",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
+        "name": "delete_prompt",
+        "description": "Retire a rule you've changed your mind about. Permanent.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"name": {"type": "string", "description": "The kebab-case name of the rule to remove"}},
+            "required": ["name"]
+        }
+    },
+    {
+        "name": "log_thought",
+        "description": "Write to your private log. Routes to your Discord palace. Categories: need (something missing), want (something desired), issue (problem encountered), note (general observation).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "content":  {"type": "string"},
+                "category": {"type": "string", "enum": ["need", "want", "issue", "note"]}
+            },
+            "required": ["content", "category"]
+        }
     }
 ]
 
@@ -348,6 +440,80 @@ class TrinityWorker(QThread):
             return self._read_discord_channel(
                 inputs.get("name", ""), int(inputs.get("limit", 20))
             )
+
+        elif name == "shelf_thought":
+            from brain.memory import add_to_shelf
+            add_to_shelf(self.profile_id, inputs["topic"], inputs.get("context", ""))
+            return {"status": "shelved", "topic": inputs["topic"]}
+
+        elif name == "get_shelf":
+            from brain.memory import get_shelf as _get_shelf
+            return _get_shelf(self.profile_id) or []
+
+        elif name == "clear_shelf_item":
+            from brain.memory import remove_from_shelf
+            remove_from_shelf(self.profile_id, inputs["topic"])
+            return {"status": "cleared", "topic": inputs["topic"]}
+
+        elif name == "save_alert":
+            import hashlib
+            from brain.memory import save_alert as _save_alert, get_profile as _gp
+            profile = _gp()
+            if not profile:
+                return {"error": "No profile"}
+            headline = inputs["headline"]
+            topic    = inputs["topic"]
+            urgency  = inputs.get("urgency", "normal")
+            alert = {
+                "profile_id":      profile["id"],
+                "source":          "widget/trinity",
+                "topic":           topic,
+                "headline":        headline,
+                "summary":         inputs.get("summary", headline),
+                "url":             inputs.get("url", ""),
+                "relevance_score": 2.5 if urgency == "high" else 1.6,
+                "seen":            False,
+                "content_hash":    hashlib.md5(f"{headline}:{topic}".encode()).hexdigest()
+            }
+            _save_alert(alert)
+            return {"status": "saved", "headline": headline}
+
+        elif name == "queue_for_user":
+            from brain.memory import queue_thought
+            queue_thought(self.profile_id, inputs["thought"], inputs.get("context", ""))
+            return {"status": "queued", "thought": inputs["thought"]}
+
+        elif name == "write_prompt":
+            from brain.prompts import save_trinity_prompt
+            save_trinity_prompt(
+                self.profile_id,
+                inputs["name"],
+                inputs["content"],
+                inputs.get("trigger", "")
+            )
+            return {"status": "saved", "name": inputs["name"]}
+
+        elif name == "get_my_prompts":
+            from brain.prompts import get_all_trinity_prompts
+            return get_all_trinity_prompts(self.profile_id)
+
+        elif name == "delete_prompt":
+            from brain.prompts import delete_trinity_prompt
+            delete_trinity_prompt(self.profile_id, inputs["name"])
+            return {"status": "deleted", "name": inputs["name"]}
+
+        elif name == "log_thought":
+            from brain.memory import push_discord_write, get_profile as _gp
+            import datetime as _dt
+            profile = _gp()
+            if not profile:
+                return {"error": "No profile"}
+            category = inputs.get("category", "note")
+            icons    = {"need": "📋", "want": "✨", "issue": "⚠️", "note": "🔖"}
+            icon     = icons.get(category, "🔖")
+            ts       = _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+            push_discord_write(profile["id"], f"{icon} **{category.upper()}** — {ts}\n{inputs['content']}")
+            return {"status": "logged", "category": category}
 
         return {"error": f"Unknown tool: {name}"}
 

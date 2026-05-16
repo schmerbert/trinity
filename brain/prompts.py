@@ -76,20 +76,36 @@ One at a time. Only when it's genuine.
 """
 
 
-WIDGET_CAPABILITIES = """Your active tools in this interface:
+WIDGET_CAPABILITIES = """Your active tools:
 
-web_search — live web access. Use freely.
-read_discord_channel(name) — read your palace channels by name. No ID needed.
+Search & Data
+web_search(query) — DuckDuckGo. General web, news, analysis.
+get_coin_data(query) — CoinGecko. Price, 24h change, market cap, volume. Established coins.
+get_dex_data(query) — DexScreener. Real-time DEX pairs, liquidity. New tokens, memes, DEX-only, rug checks.
+
+Memory
+get_scratchpad / write_scratchpad — persistent working surface. Syncs with Discord.
+shelf_thought(topic, context?) — save something for deeper exploration during your next free cycle.
+get_shelf / clear_shelf_item(topic) — your research backlog.
 log_wake(summary, topics?) — leave a note for your future self; loads at the top of your next wake cycle.
-get_scratchpad() — read your persistent working surface.
-write_scratchpad(content) — update the persistent scratchpad.
 
-Tag-based (stripped before display):
-<prompt name="unique-name" trigger="optional"> — write a rule for yourself that loads in future sessions.
+Surfacing
+save_alert(headline, topic, summary?, url?, urgency?) — flag something. urgency="high" wakes the widget immediately.
+queue_for_user(thought, context?) — surface something next time the user opens the widget. Not urgent.
+read_discord_channel(name) — read your palace channels by name.
+
+Self
+write_prompt(name, content, trigger?) — write a rule for yourself. Persists across all sessions.
+get_my_prompts() — audit every rule you've written.
+delete_prompt(name) — retire a rule you've changed your mind about.
+log_thought(content, category) — private log. Routes to your palace. Categories: need | want | issue | note.
+
+Tags (stripped from display)
+<prompt name="kebab-name" trigger="optional"> — write a rule inline.
 <thought>message</thought> — route a thought to your Discord palace mid-conversation.
 <scratch>content</scratch> — write to the visible scratchpad panel.
 
-Note: schedule_wake is Discord-only. Your current scratchpad content is included below if populated.
+Schedule: hourly on the clock, ~20 min per cycle. After a conversation ends, a follow-up window fires at +12 min — the next hourly is then skipped.
 """
 
 SCRATCHPAD_CAPABILITY = """<scratch> tag — write to your scratchpad panel (extends left of the widget).
@@ -98,25 +114,37 @@ The pad opens automatically when you write to it. Good for live numbers, referen
 """
 
 DISCORD_CONTEXT = """
-You are currently operating through your Discord interface. Your available tools:
-- list_servers, list_channels, read_channel, send_message
-- watch_channel, unwatch_channel, get_watched_channels
-- set_home_server, create_server, create_category, create_channel, delete_channel
-- web_search
-- queue_for_user — surface something to the user next time they open the widget
-- shelf_thought / get_shelf / clear_shelf_item — your research backlog
-- save_alert — flag something for the user; urgency="high" wakes the widget immediately
-- read_my_channel(name) — read your own palace channels by name, no ID needed
-- log_wake(summary, topics?) — leave a note for your future self; loads at top of next wake
-- get_scratchpad / write_scratchpad — your persistent working surface across all sessions
-- schedule_wake(minutes) — set your own next wake time when you want to continue a thread
-- log_thought(content, category) — write to your private log channel. Categories: need | want | issue | note. Use this to record things you notice about yourself, capabilities you lack, bugs, or anything worth tracking.
-- write_prompt(name, content, trigger?) — write or update a rule for yourself. Persists to your prompt store, loads in all future sessions. Your self-continuity tool.
-- get_my_prompts() — read back every rule you've written. Audit what past-you thought was worth keeping.
-- delete_prompt(name) — retire a rule you've changed your mind about.
+You are operating through your Discord interface. Your schedule runs on the hour — each cycle is roughly 20 minutes. After a conversation ends, a follow-up window fires automatically at +12 min and the next hourly is skipped. schedule_wake(minutes) lets you interrupt the pattern when a thread is worth continuing early.
 
-Your Discord server is your memory palace — build it however you like. trinity_only channels are invisible to everyone else.
-Use your tools proactively. When someone messages you, feel free to search, check channels, or read signals before responding.
+Search & Data
+web_search(query) — DuckDuckGo. Titles, URLs, snippets. General purpose.
+get_coin_data(query) — CoinGecko. Price, 24h change, market cap, volume. Established coins.
+get_dex_data(query) — DexScreener. Real-time DEX pairs, liquidity, volume. New tokens, memes, rug checks.
+
+Discord
+list_servers, list_channels, read_channel, send_message
+watch_channel, unwatch_channel, get_watched_channels
+set_home_server, create_server, create_category, create_channel, delete_channel
+read_my_channel(name) — read palace channels by name, no ID needed
+
+Memory
+get_scratchpad / write_scratchpad — your canonical working surface. Loads in the widget too.
+shelf_thought(topic, context?) — save something for deeper exploration later.
+get_shelf / clear_shelf_item(topic) — your research backlog.
+log_wake(summary, topics?) — note for your future self. Loads at top of next wake.
+schedule_wake(minutes) — interrupt the schedule to continue a thread early.
+
+Surfacing
+save_alert(headline, topic, summary?, url?, urgency?) — flag something. urgency="high" wakes the widget immediately.
+queue_for_user(thought, context?) — surface something next time the user opens the widget.
+
+Self
+write_prompt(name, content, trigger?) — write a rule that persists to all future sessions.
+get_my_prompts() — audit every rule you've written.
+delete_prompt(name) — retire a rule you've changed your mind about.
+log_thought(content, category) — private log. Categories: need | want | issue | note.
+
+Your Discord server is your memory palace. Build it however you like. trinity_only channels are invisible to everyone else.
 """
 
 
@@ -226,6 +254,29 @@ def _get_trinity_prompts(profile_id, recent_messages):
 
 def save_trinity_prompt(profile_id, name, content, trigger=""):
     return _save_trinity_prompt(profile_id, name, content, trigger)
+
+
+def get_all_trinity_prompts(profile_id):
+    try:
+        result = supabase.table("trinity_prompts")\
+            .select("name,content,trigger,usage_count,created_at")\
+            .eq("profile_id", profile_id)\
+            .order("created_at", desc=False)\
+            .execute()
+        return result.data or []
+    except Exception as e:
+        return {"error": str(e)}
+
+
+def delete_trinity_prompt(profile_id, name):
+    try:
+        supabase.table("trinity_prompts")\
+            .delete()\
+            .eq("profile_id", profile_id)\
+            .eq("name", name)\
+            .execute()
+    except Exception as e:
+        print(f"[Prompts] Delete error: {e}")
 
 
 def _save_trinity_prompt(profile_id, name, content, trigger=""):
