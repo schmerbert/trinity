@@ -225,7 +225,7 @@ def get_wake_history(profile_id, limit=3):
 #
 # alter table profiles add column if not exists wake_requested_at timestamp;
 #
-def request_wake(profile_id, minutes=12):
+def request_wake(profile_id, minutes=10):
     from datetime import datetime, timedelta
     wake_at = (datetime.utcnow() + timedelta(minutes=minutes)).isoformat()
     return update_profile(profile_id, {"wake_requested_at": wake_at})
