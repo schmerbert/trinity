@@ -140,44 +140,209 @@ class WaveWidget(QWidget):
         return path
 
 
+WIDGET_TOOLS = [
+    {"type": "web_search_20250305", "name": "web_search"},
+    {
+        "name": "read_discord_channel",
+        "description": "Read messages from one of your Discord palace channels by name. Use to review what you've written or what's been posted.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name":  {"type": "string", "description": "Channel name — partial, case-insensitive match"},
+                "limit": {"type": "integer", "description": "Messages to fetch (default 20, max 50)"}
+            },
+            "required": ["name"]
+        }
+    },
+    {
+        "name": "log_wake",
+        "description": "Leave a note for your future self that loads at the top of your next Discord wake cycle.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "summary": {"type": "string"},
+                "topics":  {"type": "array", "items": {"type": "string"}}
+            },
+            "required": ["summary"]
+        }
+    },
+    {
+        "name": "get_scratchpad",
+        "description": "Read your persistent scratchpad — your working surface across all sessions.",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
+        "name": "write_scratchpad",
+        "description": "Update your persistent scratchpad. Overwrites current content.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"content": {"type": "string"}},
+            "required": ["content"]
+        }
+    }
+]
+
+
 # --- Worker thread ---
 class TrinityWorker(QThread):
-    chunk_ready   = pyqtSignal(str)
-    response_done = pyqtSignal(str)
-    error_signal  = pyqtSignal(str)
+    chunk_ready      = pyqtSignal(str)
+    response_done    = pyqtSignal(str)
+    error_signal     = pyqtSignal(str)
+    scratchpad_write = pyqtSignal(str)
 
-    def __init__(self, client, prompt, history):
+    def __init__(self, client, prompt, history, profile_id):
         super().__init__()
-        self.client  = client
-        self.prompt  = prompt
-        self.history = history
+        self.client     = client
+        self.prompt     = prompt
+        self.history    = history
+        self.profile_id = profile_id
 
     def run(self):
-        full = ""
+        messages      = list(self.history)
+        cached_system = [{"type": "text", "text": self.prompt, "cache_control": {"type": "ephemeral"}}]
+
         for attempt in range(3):
             try:
+                # First turn: streaming for live display
+                full = ""
                 with self.client.messages.stream(
                     model="claude-sonnet-4-6",
                     max_tokens=1000,
-                    system=[{"type": "text", "text": self.prompt, "cache_control": {"type": "ephemeral"}}],
-                    messages=self.history,
-                    tools=[{"type": "web_search_20250305", "name": "web_search"}]
+                    system=cached_system,
+                    messages=messages,
+                    tools=WIDGET_TOOLS
                 ) as stream:
                     for text in stream.text_stream:
                         full += text
                         self.chunk_ready.emit(text)
+                    final = stream.get_final_message()
+
+                if final.stop_reason == "end_turn":
+                    self.response_done.emit(full)
+                    return
+
+                if final.stop_reason == "tool_use":
+                    messages = self._handle_tools(messages, final.content)
+                    # Agentic loop for subsequent turns
+                    for _ in range(8):
+                        response = self.client.messages.create(
+                            model="claude-sonnet-4-6",
+                            max_tokens=1000,
+                            system=cached_system,
+                            messages=messages,
+                            tools=WIDGET_TOOLS
+                        )
+                        if response.stop_reason == "end_turn":
+                            text = next((b.text for b in response.content if hasattr(b, "text")), "")
+                            for ch in text:
+                                self.chunk_ready.emit(ch)
+                            self.response_done.emit(text)
+                            return
+                        if response.stop_reason == "tool_use":
+                            messages = self._handle_tools(messages, response.content)
+                        else:
+                            break
+                    self.response_done.emit(full)
+                    return
+
                 self.response_done.emit(full)
                 return
+
             except Exception as e:
                 if "overloaded" in str(e).lower():
                     if attempt < 2:
                         time.sleep(10)
-                        full = ""
                     else:
-                        self.error_signal.emit("Servers are overloaded — not on my end. Try again in a moment.")
+                        self.error_signal.emit("Servers are overloaded — try again in a moment.")
                 else:
                     self.error_signal.emit(str(e))
                     return
+
+    def _handle_tools(self, messages, content):
+        assistant_content = [
+            b.model_dump() if hasattr(b, "model_dump") else
+            {"type": "text", "text": b.text} if b.type == "text" else
+            {"type": "tool_use", "id": b.id, "name": b.name, "input": b.input}
+            for b in content
+        ]
+        tool_results = []
+        for block in content:
+            if block.type == "tool_use":
+                result = self._execute_tool(block.name, block.input)
+                tool_results.append({
+                    "type":        "tool_result",
+                    "tool_use_id": block.id,
+                    "content":     json.dumps(result)
+                })
+        return messages + [
+            {"role": "assistant", "content": assistant_content},
+            {"role": "user",      "content": tool_results}
+        ]
+
+    def _execute_tool(self, name, inputs):
+        if name == "log_wake":
+            from brain.memory import log_wake_cycle
+            log_wake_cycle(self.profile_id, inputs["summary"], inputs.get("topics", []))
+            return {"status": "logged"}
+
+        elif name == "get_scratchpad":
+            from brain.memory import get_scratchpad as _gs
+            return {"content": _gs(self.profile_id)}
+
+        elif name == "write_scratchpad":
+            from brain.memory import save_scratchpad as _ss
+            _ss(self.profile_id, inputs["content"])
+            self.scratchpad_write.emit(inputs["content"])
+            return {"status": "saved"}
+
+        elif name == "read_discord_channel":
+            return self._read_discord_channel(
+                inputs.get("name", ""), int(inputs.get("limit", 20))
+            )
+
+        return {"error": f"Unknown tool: {name}"}
+
+    def _read_discord_channel(self, name_query, limit=20):
+        try:
+            import urllib.request
+            from brain.memory import get_profile as _gp
+            profile   = _gp()
+            guild_id  = profile.get("discord_home_guild_id") if profile else None
+            bot_token = os.getenv("DISCORD_BOT_TOKEN")
+            if not guild_id or not bot_token:
+                return {"error": "Discord not configured — set home server first"}
+            headers = {"Authorization": f"Bot {bot_token}"}
+
+            req = urllib.request.Request(
+                f"https://discord.com/api/v10/guilds/{guild_id}/channels",
+                headers=headers
+            )
+            with urllib.request.urlopen(req) as resp:
+                channels = json.loads(resp.read())
+
+            query   = name_query.lower().replace("-", "").replace("_", "").replace(" ", "")
+            channel = next(
+                (c for c in channels
+                 if c.get("type") == 0
+                 and query in c["name"].lower().replace("-", "").replace("_", "")),
+                None
+            )
+            if not channel:
+                return {"error": f"No channel matching '{name_query}' found"}
+
+            req = urllib.request.Request(
+                f"https://discord.com/api/v10/channels/{channel['id']}/messages?limit={min(limit,50)}",
+                headers=headers
+            )
+            with urllib.request.urlopen(req) as resp:
+                msgs = json.loads(resp.read())
+
+            return [
+                {"author": m["author"]["username"], "content": m["content"], "timestamp": m["timestamp"]}
+                for m in msgs
+            ]
+        except Exception as e:
+            return {"error": str(e)}
 
 
 # --- Main Widget ---
@@ -445,18 +610,9 @@ class TrinityWidget(QMainWindow):
                 self._load_findings(unseen)
                 mark_alerts_seen(self.profile["id"])
 
-            opening = "Hey Trinity"
-            if unseen:
-                alert_text = "Findings since we last spoke:\n"
-                for a in unseen[:5]:
-                    alert_text += f"- {a['headline']}\n"
-                opening += f"\n\n{alert_text}"
             if queued:
-                thought_text = "\n".join(f"- {q['thought']}" for q in queued[:3])
-                opening += f"\n\nYou had something you wanted to mention:\n{thought_text}"
                 clear_queued_thoughts(self.profile["id"])
-            if unseen or queued:
-                opening += "\n\nBrief me naturally."
+            opening = "Hey"
 
             update_last_seen(self.profile["id"])
             log.info(f"Startup — profile: {self.profile.get('name', '?')} | alerts: {len(unseen)} | queued: {len(queued)}")
@@ -522,17 +678,18 @@ class TrinityWidget(QMainWindow):
                 prompt += f"\n\nYour current scratchpad:\n{pad_text}"
         messages = self.history + [{"role": "user", "content": user_text}]
 
-        self.worker = TrinityWorker(self.client, prompt, messages)
+        self.worker = TrinityWorker(self.client, prompt, messages, self.profile["id"])
         self.worker.chunk_ready.connect(self._on_chunk)
         self.worker.response_done.connect(self._on_response)
         self.worker.error_signal.connect(self._on_error)
+        self.worker.scratchpad_write.connect(self._on_scratchpad_write)
         self.worker.start()
 
     def _on_chunk(self, text):
         self._stream_buffer += text
         display = self._stream_buffer
         # Hide tag blocks from the live display
-        for tag in ("<memory>", "<prompt", "<scratch>", "<thought>", "<log_wake>", "<write_scratchpad>"):
+        for tag in ("<memory>", "<prompt", "<scratch>", "<thought>"):
             if tag in display:
                 display = display.split(tag)[0]
         display = display.strip()
@@ -548,8 +705,6 @@ class TrinityWidget(QMainWindow):
         clean = re.sub(r'<memory>.*?</memory>', '', clean, flags=re.DOTALL).strip()
         clean = self._parse_scratch(clean)
         clean = self._parse_thought(clean)
-        clean = self._parse_log_wake(clean)
-        clean = self._parse_write_scratchpad(clean)
 
         self.history.append({"role": "user", "content": self._last_input})
         self.history.append({"role": "assistant", "content": clean})
@@ -658,39 +813,9 @@ class TrinityWidget(QMainWindow):
                 self._scratchpad.write_trinity(content)
         return clean
 
-    # --- Wake log + scratchpad write tags ---
-    def _parse_log_wake(self, reply):
-        if not self.profile or "<log_wake>" not in reply:
-            return reply
-        parts = re.split(r'<log_wake>(.*?)</log_wake>', reply, flags=re.DOTALL)
-        clean = "\n\n".join(p.strip() for i, p in enumerate(parts) if i % 2 == 0 and p.strip())
-        for i in range(1, len(parts), 2):
-            content = parts[i].strip()
-            if content:
-                try:
-                    from brain.memory import log_wake_cycle
-                    log_wake_cycle(self.profile["id"], content)
-                    log.info(f"Wake note saved: {content[:60]}")
-                except Exception:
-                    pass
-        return clean
-
-    def _parse_write_scratchpad(self, reply):
-        if not self.profile or "<write_scratchpad>" not in reply:
-            return reply
-        parts = re.split(r'<write_scratchpad>(.*?)</write_scratchpad>', reply, flags=re.DOTALL)
-        clean = "\n\n".join(p.strip() for i, p in enumerate(parts) if i % 2 == 0 and p.strip())
-        for i in range(1, len(parts), 2):
-            content = parts[i].strip()
-            if content:
-                try:
-                    save_scratchpad(self.profile["id"], content)
-                    if _SCRATCHPAD and self._scratchpad:
-                        self._scratchpad._text.setPlainText(content)
-                    log.info(f"Scratchpad updated from widget ({len(content)} chars)")
-                except Exception:
-                    pass
-        return clean
+    def _on_scratchpad_write(self, content):
+        if _SCRATCHPAD and self._scratchpad:
+            self._scratchpad._text.setPlainText(content)
 
     # --- Thought routing (widget → Discord palace) ---
     def _parse_thought(self, reply):

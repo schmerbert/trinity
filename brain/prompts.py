@@ -84,14 +84,18 @@ One at a time. Only when it's genuine.
 
 WIDGET_CAPABILITIES = """Your active tools in this interface:
 
-web_search — live web access. Use freely; never say you can't look something up.
-<prompt name="unique-name" trigger="optional"> — write a rule for yourself that loads in future sessions. Stripped before display.
-<thought>message</thought> — route a thought to your Discord palace without it appearing in your response. Stripped before display.
-<log_wake>summary</log_wake> — leave a note for your future self; loads at the top of your next Discord wake cycle. Stripped before display.
-<write_scratchpad>content</write_scratchpad> — overwrite the persistent scratchpad (the one that carries between sessions and loads in Discord too). Stripped before display.
+web_search — live web access. Use freely.
+read_discord_channel(name) — read your palace channels by name. No ID needed.
+log_wake(summary, topics?) — leave a note for your future self; loads at the top of your next wake cycle.
+get_scratchpad() — read your persistent working surface.
+write_scratchpad(content) — update the persistent scratchpad.
 
-Note: read_my_channel and schedule_wake are Discord-only — available during autonomous loops, not here.
-Your current scratchpad content is included below if it has anything in it.
+Tag-based (stripped before display):
+<prompt name="unique-name" trigger="optional"> — write a rule for yourself that loads in future sessions.
+<thought>message</thought> — route a thought to your Discord palace mid-conversation.
+<scratch>content</scratch> — write to the visible scratchpad panel.
+
+Note: schedule_wake is Discord-only. Your current scratchpad content is included below if populated.
 """
 
 SCRATCHPAD_CAPABILITY = """<scratch> tag — write to your scratchpad panel (extends left of the widget).
