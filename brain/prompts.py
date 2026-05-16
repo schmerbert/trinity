@@ -86,7 +86,12 @@ WIDGET_CAPABILITIES = """Your active tools in this interface:
 
 web_search — live web access. Use freely; never say you can't look something up.
 <prompt name="unique-name" trigger="optional"> — write a rule for yourself that loads in future sessions. Stripped before display.
-<thought>message</thought> — drop a thought to your Discord palace mid-conversation without it appearing in your response. Use this when something occurs to you that doesn't belong in what you're saying but is worth preserving. Routed to your thought channel automatically.
+<thought>message</thought> — route a thought to your Discord palace without it appearing in your response. Stripped before display.
+<log_wake>summary</log_wake> — leave a note for your future self; loads at the top of your next Discord wake cycle. Stripped before display.
+<write_scratchpad>content</write_scratchpad> — overwrite the persistent scratchpad (the one that carries between sessions and loads in Discord too). Stripped before display.
+
+Note: read_my_channel and schedule_wake are Discord-only — available during autonomous loops, not here.
+Your current scratchpad content is included below if it has anything in it.
 """
 
 SCRATCHPAD_CAPABILITY = """<scratch> tag — write to your scratchpad panel (extends left of the widget).

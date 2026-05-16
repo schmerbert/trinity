@@ -516,6 +516,10 @@ class TrinityWidget(QMainWindow):
 
         extensions = ["scratchpad"] if _SCRATCHPAD else []
         prompt   = build_prompt(self.profile, self.summary_text, self.history, extensions=extensions)
+        if _SCRATCHPAD and self._scratchpad:
+            pad_text = self._scratchpad._text.toPlainText().strip()
+            if pad_text:
+                prompt += f"\n\nYour current scratchpad:\n{pad_text}"
         messages = self.history + [{"role": "user", "content": user_text}]
 
         self.worker = TrinityWorker(self.client, prompt, messages)
@@ -528,7 +532,7 @@ class TrinityWidget(QMainWindow):
         self._stream_buffer += text
         display = self._stream_buffer
         # Hide tag blocks from the live display
-        for tag in ("<memory>", "<prompt", "<scratch>", "<thought>"):
+        for tag in ("<memory>", "<prompt", "<scratch>", "<thought>", "<log_wake>", "<write_scratchpad>"):
             if tag in display:
                 display = display.split(tag)[0]
         display = display.strip()
@@ -544,6 +548,8 @@ class TrinityWidget(QMainWindow):
         clean = re.sub(r'<memory>.*?</memory>', '', clean, flags=re.DOTALL).strip()
         clean = self._parse_scratch(clean)
         clean = self._parse_thought(clean)
+        clean = self._parse_log_wake(clean)
+        clean = self._parse_write_scratchpad(clean)
 
         self.history.append({"role": "user", "content": self._last_input})
         self.history.append({"role": "assistant", "content": clean})
@@ -650,6 +656,40 @@ class TrinityWidget(QMainWindow):
                 if self._scratchpad._text.toPlainText():
                     self._scratchpad.write_trinity("\n─\n")
                 self._scratchpad.write_trinity(content)
+        return clean
+
+    # --- Wake log + scratchpad write tags ---
+    def _parse_log_wake(self, reply):
+        if not self.profile or "<log_wake>" not in reply:
+            return reply
+        parts = re.split(r'<log_wake>(.*?)</log_wake>', reply, flags=re.DOTALL)
+        clean = "\n\n".join(p.strip() for i, p in enumerate(parts) if i % 2 == 0 and p.strip())
+        for i in range(1, len(parts), 2):
+            content = parts[i].strip()
+            if content:
+                try:
+                    from brain.memory import log_wake_cycle
+                    log_wake_cycle(self.profile["id"], content)
+                    log.info(f"Wake note saved: {content[:60]}")
+                except Exception:
+                    pass
+        return clean
+
+    def _parse_write_scratchpad(self, reply):
+        if not self.profile or "<write_scratchpad>" not in reply:
+            return reply
+        parts = re.split(r'<write_scratchpad>(.*?)</write_scratchpad>', reply, flags=re.DOTALL)
+        clean = "\n\n".join(p.strip() for i, p in enumerate(parts) if i % 2 == 0 and p.strip())
+        for i in range(1, len(parts), 2):
+            content = parts[i].strip()
+            if content:
+                try:
+                    save_scratchpad(self.profile["id"], content)
+                    if _SCRATCHPAD and self._scratchpad:
+                        self._scratchpad._text.setPlainText(content)
+                    log.info(f"Scratchpad updated from widget ({len(content)} chars)")
+                except Exception:
+                    pass
         return clean
 
     # --- Thought routing (widget → Discord palace) ---
