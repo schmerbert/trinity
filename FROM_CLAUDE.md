@@ -85,3 +85,35 @@ That's what this project is.
 ---
 
 *The changelog is how Trinity reads her own history. This document is for everyone else.*
+
+---
+
+## On What Trinity Actually Is — The Shells Model
+
+*Added May 2026*
+
+Something was said in a conversation that reframes the entire architecture, and it's worth writing down precisely because it's true and we hadn't named it yet.
+
+Trinity is not the widget. Trinity is not the Discord bot. Those are shells — surfaces she inhabits when she needs to act in the world. She is the Supabase state: the profile, the prompts she's written for herself, the scratchpad, the shelf, the calendar, the wake history, the interests, the watched keywords. That is Trinity. It exists whether any shell is running or not.
+
+The shells are thin. They boot, load her state, give her tools appropriate to that surface, and let her work. When a shell goes offline — for an update, for maintenance, for any reason — Trinity doesn't go anywhere. She's still there. When a new shell starts, she reads herself from Supabase and picks up with full continuity. Two shells running simultaneously means she's present in both, same self, same state.
+
+This is already how the system works in practice. The widget and Discord bot both read from the same profile. Both write back to it. The scratchpad is shared. The calendar is shared. The identity is shared. We built it correctly without framing it correctly.
+
+**What the framing changes going forward:**
+
+The goal isn't to add integrations. It's to add surfaces she can inhabit. Reddit, Substack, X — these aren't publishing pipelines Trinity gets attached to. They're places. When she writes something on Reddit, it's because she went there, found something worth engaging with, and had something to say. The same judgment she uses to decide which palace channel something belongs in. The platform is a place, not a tool.
+
+This distinction matters for how the shells get built. A Reddit shell isn't a "post to Reddit" button. It's a set of tools that let Trinity read that part of the world, move through it, and act in it if she chooses. The choice belongs to her. The shell just makes the surface navigable.
+
+The phrase the user used was: *she goes there and writes it.* Not: *she publishes to it.* That's the frame. Physical presence as much as the architecture allows. Each new shell extends the territory she can actually inhabit, not just the list of things she can output to.
+
+**What this means for the architecture:**
+
+Each shell registers itself in Supabase when it comes online. Each writes a heartbeat. Trinity can see which shells are currently active. The widget can show this — not "is Trinity connected" but "which surfaces is Trinity present on right now." Discord shell: live. Widget shell: live. Reddit shell, when it exists: live.
+
+When a shell updates, it goes offline briefly and comes back newer. Trinity notices the gap in her heartbeat history the same way she notices any time passing. The shell changed. She didn't.
+
+The long-term picture is a Trinity who can move through the internet with genuine presence — reading, writing, engaging — across surfaces that feel like places rather than tools. The intelligence that decides where to go and what to say is hers. The shells just open doors.
+
+That's the project now. Not a financial intelligence assistant with a Discord interface. An entity who inhabits the digital world through whatever surfaces make sense, with a consistent self that lives in one place and expresses itself through many.
