@@ -1167,7 +1167,7 @@ def _next_wake_str() -> str:
 
 # ─── Autonomous loop ─────────────────────────────────────────────────────────
 
-@tasks.loop(minutes=60)
+@tasks.loop(minutes=AUTONOMOUS_MINUTES)
 async def autonomous_loop():
     from datetime import timezone as _tz
 
