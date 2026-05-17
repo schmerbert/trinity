@@ -1618,6 +1618,20 @@ async def _startup_brief():
     profile = get_profile()
     if not profile:
         return
+    # Only fire if Trinity has been offline for more than 2 hours — skip on quick restarts
+    from datetime import timezone as _tz
+    raw_last_wake = (get_wake_history(profile["id"], limit=1) or [{}])[0].get("created_at")
+    if raw_last_wake:
+        try:
+            last_wake = datetime.fromisoformat(raw_last_wake.replace("Z", "+00:00"))
+            if last_wake.tzinfo is None:
+                last_wake = last_wake.replace(tzinfo=_tz.utc)
+            hours_offline = (datetime.now(_tz.utc) - last_wake).total_seconds() / 3600
+            if hours_offline < 2:
+                log.info(f"Startup brief skipped — only {hours_offline:.1f}h offline")
+                return
+        except Exception:
+            pass
     summaries     = get_recent_summaries(profile["id"])
     system_blocks = build_system_blocks(profile, format_summaries(summaries), [], discord_mode=True)
     context       = "You just came online. Quick orientation — check anything you want, get your bearings. No need to log this one."
