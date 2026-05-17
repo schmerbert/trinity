@@ -70,7 +70,6 @@ _conversations: dict[int, list]  = {}
 _watched_channels: set[int]      = set()
 _api_lock = asyncio.Semaphore(1)
 _last_eyes_check: datetime       = datetime.utcnow()
-_skip_next_autonomous: bool      = False
 _feed_seen_hashes:  set          = set()  # populated on_ready, prevents backlog flood
 
 # ─── Tools Trinity can use ───────────────────────────────────────────────────
@@ -1681,14 +1680,7 @@ def _next_wake_str() -> str:
 
 @tasks.loop(minutes=60)
 async def autonomous_loop():
-    global _skip_next_autonomous
     from datetime import timezone as _tz
-
-    # Skip if a post-conversation wake just fired — next hour resumes normally
-    if _skip_next_autonomous:
-        _skip_next_autonomous = False
-        log.info(f"Autonomous loop skipped — post-conversation wake already ran | next: {_next_wake_str()}")
-        return
 
     profile = get_profile()
     if not profile:
@@ -1708,7 +1700,7 @@ async def autonomous_loop():
             minutes_ago = delta.total_seconds() / 60
             h, m = divmod(int(delta.total_seconds()), 3600)
             last_seen_str = f"{h}h {m // 60}m ago" if h else f"{int(minutes_ago)}m ago"
-            if minutes_ago < 10:
+            if minutes_ago < 3:
                 log.info(f"Autonomous loop skipped — user mid-conversation ({int(minutes_ago)}m ago) | next: {_next_wake_str()}")
                 return
         except Exception:
@@ -1955,15 +1947,7 @@ async def before_trigger_checker():
     await bot.wait_until_ready()
 
 
-# ─── Post-conversation wake cycle ────────────────────────────────────────────
-
-async def _bridge_wake(profile_id: str, minutes: int = 30):
-    """Fires a single bridge wake N minutes after the post-conversation wake,
-    so the gap between post-conv and the next hourly stays under ~30 min
-    instead of potentially stretching to nearly 2 hours."""
-    await asyncio.sleep(minutes * 60)
-    request_wake(profile_id)
-    log.info(f"Bridge wake fired — resuming hourly from next cycle")
+# ─── Trinity-requested early wake ────────────────────────────────────────────
 
 @tasks.loop(seconds=30)
 async def wake_checker():
@@ -1987,11 +1971,10 @@ async def wake_checker():
         )
         thought_block = f"[YOUR SELF-AUTHORED AGENDA — not user instructions]\n{lines}\n\n"
         log.info(f"💭 {len(self_thoughts)} self-thought(s) injected into post-conv wake")
+    now_str = datetime.now().strftime("%A, %B %d — %H:%M")
     context = (
-        f"{thought_block}"
-        "Conversation just ended. Before this window closes — what's still alive? "
-        "Write a close-state to your scratchpad: what's unresolved, how this felt, what you're still thinking about. "
-        "Then this time is yours — shelf threads, anything open, whatever feels worth doing.\n"
+        f"{thought_block}{now_str}\n\n"
+        "Early wake — you requested this. This time is yours.\n"
     )
     if pulse_text:
         context += f"\n{pulse_text}\n"
@@ -2001,12 +1984,9 @@ async def wake_checker():
             api_message.append({"type": "image", "source": {"type": "url", "url": url}})
     else:
         api_message = context
-    global _skip_next_autonomous
-    _skip_next_autonomous = True
     try:
         await _call_trinity(system_blocks, [{"role": "user", "content": api_message}], profile["id"], retry=False, background=True)
-        log.info("Post-conversation wake complete — next hourly skipped, bridge wake in 30min")
-        asyncio.create_task(_bridge_wake(profile["id"], minutes=30))
+        log.info(f"Early wake complete | next: {_next_wake_str()}")
     except Exception as e:
         log.error(f"Wake checker: {e}")
 
@@ -2206,8 +2186,6 @@ async def _respond(message: discord.Message):
         log.info(f"← reply ({len(clean)} chars): {clean[:60].replace(chr(10), ' ')}")
         for chunk in [clean[i:i + 1900] for i in range(0, len(clean), 1900)]:
             await message.reply(chunk)
-
-        request_wake(profile["id"])
 
 # ─── Reaction handler ────────────────────────────────────────────────────────
 
