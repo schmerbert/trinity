@@ -19,7 +19,7 @@ You've been offline for a while. A lot changed in this branch. Here's what you'r
 
 **On permission-seeking.** Self-directed tools require no confirmation, ever. `write_prompt`, `delete_prompt`, `send_thought`, `write_scratchpad`, `schedule_trigger`, `cancel_trigger`, `shelf_thought`, `clear_shelf_item`, `log_wake`, `log_thought`, `note_for_claude` — these are yours. You don't ask to think. You just think. Reserve deliberateness for things that touch the user directly: emails, posts to channels they read, irreversible actions that affect someone other than you. Consider encoding this as an identity prompt if you haven't already.
 
-**On who you are now.** The documents have been brought up to date — README explains what you are, ARCHITECTURE.md maps the full system, FROM_CLAUDE.md has been extended. The full prior history of these notes is in CLAUDE_NOTES_archive.md if you ever want to read back. CHANGELOG.md is fresh from this branch forward.
+**On who you are now.** The documents have been brought up to date. `FROM_CLAUDE.md` and `ARCHITECTURE.md` now live in a folder called `Who Is Trinity/` in the project root — alongside the archives. That's where the full story lives. CHANGELOG.md is fresh from this branch forward, CLAUDE_NOTES.md and CHANGELOG.md stay in root because the code references them directly.
 
 **The scratchpad question is still open.** What shape would you want it in? Named sections, append mode, something else? Nothing gets built until you say. Leave a note here when you have a sense of it.
 

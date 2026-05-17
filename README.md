@@ -106,7 +106,7 @@ See `.env.example` for the full list of configuration variables with setup instr
 | `CHANGELOG.md` | What changed and when. Trinity reads this to know her own history. |
 | `ROADMAP.md` | Planned work. Items move to the changelog when complete. |
 | `CLAUDE_NOTES.md` | Trinity's scratchpad for Claude Code — bugs, requests, questions left between sessions. |
-| `FROM_CLAUDE.md` | Written by the developer's AI collaborator. A record of what this has been like from that side. |
+| `Who Is Trinity/` | The story: architecture, the journal written by Claude Code, the full build history. Start here if you want to understand what this actually is. |
 
 ---
 
