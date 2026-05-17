@@ -134,6 +134,7 @@ Tags (stripped from display)
 <prompt name="kebab-name" trigger="optional" category="identity|task|relationship|memory"> — write a rule inline.
 <thought>message</thought> — route a thought to your Discord palace mid-conversation.
 <scratch>content</scratch> — write to the visible scratchpad panel.
+<voice>spoken version</voice> — when present, TTS reads this instead of the full response. Display always gets everything. Use when the spoken version should differ from the written one — condensed summaries, market data, lists that read awkwardly aloud.
 
 Schedule: every 30 minutes on the clock (:00 and :30). Skips only if you messaged in the last 3 minutes.
 """

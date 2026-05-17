@@ -59,7 +59,8 @@ COLOR_BORDER     = QColor(40, 100, 180, 120)
 
 IDLE_COLLAPSE_MS = 90_000
 
-_MD_STRIP = re.compile(r'\*{1,2}|_{1,2}|`+|#{1,6}\s*|>\s*|^\s*[-•]\s*', re.MULTILINE)
+_MD_STRIP   = re.compile(r'\*{1,2}|_{1,2}|`+|#{1,6}\s*|>\s*|^\s*[-•]\s*', re.MULTILINE)
+_VOICE_RE   = re.compile(r'<voice>(.*?)</voice>', re.DOTALL)
 
 # Activity log filter — lines containing any KEEP token are shown; SKIP wins if both match
 _ACTIVITY_KEEP = (
@@ -1598,7 +1599,7 @@ class TrinityWidget(QMainWindow):
         self._stream_buffer += text
         display = self._stream_buffer
         # Hide tag blocks from the live display
-        for tag in ("<memory>", "<prompt", "<scratch>", "<thought>"):
+        for tag in ("<memory>", "<prompt", "<scratch>", "<thought>", "<voice>"):
             if tag in display:
                 display = display.split(tag)[0]
         display = display.strip()
@@ -1631,15 +1632,21 @@ class TrinityWidget(QMainWindow):
         self.input_field.setFocus()
         self._idle_timer.start()
 
+        voice_match = _VOICE_RE.search(clean)
+        if voice_match:
+            spoken = voice_match.group(1).strip()
+            clean = _VOICE_RE.sub('', clean).strip()
+        else:
+            spoken = clean
+
         self._display(clean)
         if self.tts_enabled:
             self._tts_stop = False
             self._tts_active = True
             if self._kokoro is not None:
-                threading.Thread(target=self._speak_chunked, args=(clean,), daemon=True).start()
+                threading.Thread(target=self._speak_chunked, args=(spoken,), daemon=True).start()
             else:
-                spoken = _strip_for_tts(clean)
-                threading.Thread(target=self._speak, args=(spoken,), daemon=True).start()
+                threading.Thread(target=self._speak, args=(_strip_for_tts(spoken),), daemon=True).start()
 
     def _on_error(self, msg):
         log.error(f"API: {msg[:120]}")

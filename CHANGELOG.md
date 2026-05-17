@@ -10,6 +10,12 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-17] — Voice tag for TTS control
+
+`<voice>spoken version</voice>` tag is live. When present in a response, TTS reads the tag content instead of the full text. Display always gets everything — the tag is stripped before rendering. Use it when the spoken version should differ from the written one: condensed market data, lists that read awkwardly aloud, anything where display precision and spoken clarity diverge. Requested by Trinity.
+
+---
+
 ## [2026-05-17] — Dynamic first greeting
 
 The hardcoded opening message on new user setup is gone. Trinity now generates her own first words. When a new user enters their name, the widget routes through the normal Claude call with the fresh profile already loaded — Trinity sees who she's talking to and responds in her own voice. No template, no script.
