@@ -15,21 +15,38 @@ Trinity's self lives in Supabase. The interfaces (widget, Discord bot) are shell
 ```
 Trinity/
 ├── brain/
-│   ├── llm.py          — Claude API call loop, tool execution, retry logic
-│   ├── memory.py       — All Supabase reads and writes (single source of truth)
-│   ├── prompts.py      — System prompts and capability context for each shell
-│   └── tools.py        — Tool definitions shared across shells
+│   ├── llm.py              — Claude API call loop, tool execution, retry logic
+│   ├── memory.py           — All Supabase reads and writes (single source of truth)
+│   ├── prompts.py          — System prompts and capability context for each shell
+│   └── tools.py            — Tool definitions shared across shells
 │
 ├── voice/
-│   ├── widget.py       — PyQt6 desktop interface
-│   └── discord_interface.py  — Discord bot + all background tasks
+│   ├── widget.py           — PyQt6 desktop interface
+│   └── discord_interface.py — Discord bot + all background tasks
 │
-├── .env                — All secrets and config (never committed)
-├── CLAUDE_NOTES.md     — Trinity's scratchpad for Claude Code between sessions
-├── CHANGELOG.md        — What changed and when
-├── ROADMAP.md          — Planned work
-├── FROM_CLAUDE.md      — Claude Code's journal on the project
-└── README.md           — What Trinity is
+├── eyes/
+│   └── scraper.py          — Monitors Reddit, NewsAPI, and DexScreener for relevant signals
+│
+├── nervous_system/
+│   └── watcher.py          — Runs scraper.py on a 4-hour loop, logs to trinity_eyes.log
+│
+├── launcher.py             — Starts all processes (widget + Discord bot + eyes) with a log window
+├── trinity.bat             — Lightweight launcher (no log window)
+├── find_trinity.py         — Lists all running Trinity processes and their PIDs
+├── kill_trinity.py         — Stops all Trinity processes cleanly
+├── backup.py               — Snapshots Supabase state to a local JSON file
+├── restore.py              — Restores from a backup snapshot
+├── install.ps1             — First-time installer: Python, venv, deps, .env, desktop shortcut
+├── build_exe.bat           — Packages Trinity into a standalone .exe via PyInstaller
+│
+├── .env                    — All secrets and config (never committed)
+├── .env.example            — Template with setup instructions for every variable
+├── CLAUDE_NOTES.md         — Trinity's scratchpad for Claude Code between sessions
+├── CHANGELOG.md            — What changed and when
+├── ROADMAP.md              — Planned work
+├── ARCHITECTURE.md         — This file
+├── FROM_CLAUDE.md          — Claude Code's journal on the project
+└── README.md               — What Trinity is
 ```
 
 ---
@@ -145,6 +162,26 @@ Maps palace channel names to Discord channel IDs.
 | `profile_id` | uuid | FK to profiles |
 | `name` | text | Channel name |
 | `channel_id` | text | Discord channel snowflake ID |
+
+---
+
+## The Eyes System
+
+A separate background process (`nervous_system/watcher.py`) runs `eyes/scraper.py` every 4 hours. It runs silently alongside the main processes and logs to `trinity_eyes.log`.
+
+The scraper pulls from three sources:
+
+| Source | What it does |
+|--------|-------------|
+| **Reddit** | Scans subreddits from `REDDIT_SUBREDDITS` env var for posts matching `KEYWORDS` |
+| **NewsAPI** | Queries each keyword against NewsAPI (requires `NEWS_API_KEY`) |
+| **DexScreener** | Resolves Trinity's crypto interests by symbol, pulls live price/volume/liquidity |
+
+Each result is scored by relevance against Trinity's interest weights, deduplicated, and saved to the `alerts` table. At the next wake cycle, unseen alerts are surfaced in Trinity's context.
+
+**Scoring:** each interest match adds its weight to the score; each keyword match adds 0.5. Results below 0.5 are dropped.
+
+**The eyes run independently of the Discord bot.** They can be disabled without affecting any other system — Trinity just won't receive background intelligence signals.
 
 ---
 

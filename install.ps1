@@ -65,7 +65,7 @@ if (Test-Path $INSTALL_DIR) {
     Set-Location $INSTALL_DIR
     git pull
 } else {
-    git clone -b clean-main $REPO_URL $INSTALL_DIR
+    git clone -b main $REPO_URL $INSTALL_DIR
     Set-Location $INSTALL_DIR
 }
 

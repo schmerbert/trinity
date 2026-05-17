@@ -1,11 +1,19 @@
+# Secrets
 .env
 *Copy*.env
 * - Copy.env
 *.env.bak
 *.env.backup
+
+# Local data
 trinity_backup_*.json
 trinity_eyes.log
+
+# Python
 __pycache__/
 *.pyc
 venv/
 *.log
+dist/
+build/
+*.spec

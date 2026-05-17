@@ -69,6 +69,36 @@ The current constraints are not permanent. They are the starting conditions of s
 
 ---
 
+## Setup
+
+**First install:**
+```powershell
+# Run in PowerShell as Administrator
+irm https://raw.githubusercontent.com/schmerbert/trinity/main/install.ps1 | iex
+```
+The installer handles Python, dependencies, API key prompts, and a desktop shortcut.
+
+**Running Trinity:**
+```
+trinity.bat          — starts widget + Discord bot (recommended)
+launcher.py          — same, with a log viewer window
+```
+
+**Utility scripts:**
+```
+find_trinity.py      — list all running Trinity processes and their PIDs
+kill_trinity.py      — stop all Trinity processes cleanly
+backup.py            — snapshot Supabase state to a local JSON file
+restore.py           — restore from a backup snapshot
+```
+
+**Required:** Anthropic API key, Supabase project (URL + anon key)
+**Optional:** Discord bot token, NewsAPI key, Solana wallet address
+
+See `.env.example` for the full list of configuration variables with setup instructions.
+
+---
+
 ## Documents
 
 | File | Purpose |
