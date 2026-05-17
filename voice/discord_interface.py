@@ -647,6 +647,7 @@ async def on_ready():
     thought_drain.start()
     wake_checker.start()
     trigger_checker.start()
+    heartbeat.start()
     # Seed seen feed hashes so first poll doesn't flood the channel with backlog
     global _feed_seen_hashes
     from brain.feeds import seed_seen as _seed_feeds, FEED_SOURCES as _DEFAULT_FEEDS
@@ -1668,6 +1669,14 @@ async def _palace_pulse(limit_per_channel: int = 12) -> tuple[str, list[str]]:
     return text, image_urls
 
 
+def _next_wake_str() -> str:
+    now = datetime.utcnow()
+    minutes_to_next = AUTONOMOUS_MINUTES - (now.minute % AUTONOMOUS_MINUTES) or AUTONOMOUS_MINUTES
+    from datetime import timedelta
+    next_dt = now + timedelta(minutes=minutes_to_next)
+    return next_dt.strftime("%H:%M UTC")
+
+
 # ─── Autonomous loop ─────────────────────────────────────────────────────────
 
 @tasks.loop(minutes=60)
@@ -1678,7 +1687,7 @@ async def autonomous_loop():
     # Skip if a post-conversation wake just fired — next hour resumes normally
     if _skip_next_autonomous:
         _skip_next_autonomous = False
-        log.info("Autonomous loop skipped — post-conversation wake already ran")
+        log.info(f"Autonomous loop skipped — post-conversation wake already ran | next: {_next_wake_str()}")
         return
 
     profile = get_profile()
@@ -1700,13 +1709,13 @@ async def autonomous_loop():
             h, m = divmod(int(delta.total_seconds()), 3600)
             last_seen_str = f"{h}h {m // 60}m ago" if h else f"{int(minutes_ago)}m ago"
             if minutes_ago < 10:
-                log.info(f"Autonomous loop skipped — user mid-conversation ({int(minutes_ago)}m ago)")
+                log.info(f"Autonomous loop skipped — user mid-conversation ({int(minutes_ago)}m ago) | next: {_next_wake_str()}")
                 return
         except Exception:
             last_seen_str = raw_last_seen[:16]
 
     if _api_lock.locked():
-        log.info(f"Autonomous loop skipped — API busy ({now_str})")
+        log.info(f"Autonomous loop skipped — API busy ({now_str}) | next: {_next_wake_str()}")
         return
 
     interests    = profile.get("interests") or []
@@ -1771,6 +1780,7 @@ Hourly window — roughly 20 minutes."""
         now = datetime.utcnow()
         minutes_to_next = AUTONOMOUS_MINUTES - (now.minute % AUTONOMOUS_MINUTES) or AUTONOMOUS_MINUTES
         autonomous_loop.change_interval(minutes=minutes_to_next)
+        log.info(f"── next wake: {_next_wake_str()} ({minutes_to_next}m) ──")
 
 @autonomous_loop.before_loop
 async def before_autonomous():
@@ -2002,6 +2012,17 @@ async def wake_checker():
 
 @wake_checker.before_loop
 async def before_wake_checker():
+    await bot.wait_until_ready()
+
+
+# ─── Heartbeat — logs next wake time every 10 minutes ────────────────────────
+
+@tasks.loop(minutes=10)
+async def heartbeat():
+    log.info(f"◎ alive | next wake: {_next_wake_str()}")
+
+@heartbeat.before_loop
+async def before_heartbeat():
     await bot.wait_until_ready()
 
 
