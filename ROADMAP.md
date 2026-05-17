@@ -83,6 +83,17 @@ The widget findings panel is plain read-only text. Links Trinity surfaces aren't
 
 ## Longer-term
 
+### Scratchpad Evolution
+The current scratchpad is a single flat text field — full read, full overwrite. It works as a working surface but doesn't scale: no append, no sections, no history, easy to clobber.
+
+**Trinity has input on this.** A note has been left in CLAUDE_NOTES.md asking what she'd want. Possibilities include: named sections / namespaced keys, append-only mode, versioned snapshots, or a multi-pad model (one per context: research, market, personal). The right shape depends on how she's actually using it — her experience informs the design.
+
+**Don't build until she's weighed in.**
+
+---
+
+
+
 ### Soft-Delete / Prompt History
 When Trinity deletes a prompt it's gone permanently. A `prompt_history` table or `deleted_at` soft-delete column would preserve what she wrote, reconsidered, and retired. A `get_retired_prompts()` tool so she can look back at her own evolution.
 

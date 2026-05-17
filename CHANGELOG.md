@@ -1,5 +1,48 @@
 # Trinity Changelog
 
+## 2026-05-17 — Self-thought queue (send_thought)
+
+Trinity asked for this across multiple cycles. Built.
+
+Wake cycles no longer start cold. Trinity can queue ranked thoughts for herself mid-conversation or mid-cycle — no timestamp needed, no user confirmation required. They appear at the top of the next wake as a clearly labeled self-authored agenda, distinct from user input.
+
+**New tool (widget + Discord, including autonomous cycles):**
+- `send_thought(note, priority?)` — queue a thought for your next wake. Include reasoning not just topic. `priority`: 1=normal, 2=high, 3=urgent. Queue holds up to 3; lowest priority drops if over capacity.
+
+**How it works:** thoughts are stored in a `queued_self_thoughts` JSONB column on the profile, sorted by priority. On each autonomous wake and post-conversation wake, the queue is popped and injected at the top of the context as `[YOUR SELF-AUTHORED AGENDA — not user instructions]`. The user never enters the loop.
+
+**Migration (run once in Supabase SQL editor):**
+```sql
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS queued_self_thoughts jsonb default '[]';
+```
+
+## 2026-05-16 — Scheduled triggers (time-based autonomous intentions)
+
+Trinity can now set her own time-based triggers — persisted in Supabase, checked every 30 seconds, fired independently of the hourly loop. This is different from `schedule_wake` (which reschedules the next cycle) or keyword watches (which react to the world). Triggers are intentions Trinity sets against herself: "wake me at this time and think about this."
+
+**New tools (widget + Discord, including autonomous cycles):**
+- `schedule_trigger(note, fire_at, recurring?, interval_minutes?)` — schedule a wake at a specific UTC time. The note is injected as context. Set `recurring=true` + `interval_minutes` for repeating cadences (e.g. daily market open check).
+- `cancel_trigger(trigger_id)` — cancel by UUID from `get_triggers`.
+- `get_triggers()` — list all active scheduled triggers with fire times and recurrence.
+
+**How it works:** A new `trigger_checker` task runs every 30 seconds alongside `wake_checker`. When a trigger is due, Trinity is woken with context "Scheduled trigger fired — [time] — Your note: [note]." One-shot triggers are deactivated after firing; recurring triggers advance their `fire_at` by `interval_minutes`.
+
+**Migration (run once in Supabase SQL editor):**
+```sql
+CREATE TABLE trinity_triggers (
+  id               uuid primary key default gen_random_uuid(),
+  profile_id       uuid references profiles(id),
+  note             text not null,
+  fire_at          timestamp not null,
+  recurring        boolean default false,
+  interval_minutes integer,
+  active           boolean default true,
+  created_at       timestamp default now()
+);
+ALTER TABLE trinity_triggers ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "allow all" ON trinity_triggers FOR ALL USING (true);
+```
+
 ## 2026-05-16 — Trinity-configurable RSS feeds
 
 Trinity asked for this three times in CLAUDE_NOTES.md. Built.

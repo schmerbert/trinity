@@ -410,6 +410,111 @@ def get_feeds(profile_id):
         return []
 
 
+# ─── Self-thought queue — Trinity's ranked agenda for her next wake ──────────
+#
+# alter table profiles add column if not exists queued_self_thoughts jsonb default '[]';
+#
+def queue_self_thought(profile_id, note, priority=1, source="cycle"):
+    """Queue a ranked thought for the next wake. Priority: 1=normal, 2=high, 3=urgent.
+    Keeps top 3 by priority; drops lowest if over capacity."""
+    from datetime import datetime
+    profile = get_profile()
+    thoughts = list(profile.get("queued_self_thoughts") or [])
+    thoughts.append({"note": note, "priority": priority, "source": source, "at": datetime.utcnow().isoformat()})
+    thoughts.sort(key=lambda t: t.get("priority", 1), reverse=True)
+    thoughts = thoughts[:3]
+    return update_profile(profile_id, {"queued_self_thoughts": thoughts})
+
+def pop_self_thoughts(profile_id):
+    """Return queued self-thoughts sorted by priority and clear the queue."""
+    profile = get_profile()
+    thoughts = list(profile.get("queued_self_thoughts") or [])
+    if thoughts:
+        update_profile(profile_id, {"queued_self_thoughts": []})
+    return sorted(thoughts, key=lambda t: t.get("priority", 1), reverse=True)
+
+
+# ─── Scheduled triggers — Trinity's own time-based intentions ────────────────
+#
+# create table trinity_triggers (
+#   id               uuid primary key default gen_random_uuid(),
+#   profile_id       uuid references profiles(id),
+#   note             text not null,
+#   fire_at          timestamp not null,
+#   recurring        boolean default false,
+#   interval_minutes integer,
+#   active           boolean default true,
+#   created_at       timestamp default now()
+# );
+# alter table trinity_triggers enable row level security;
+# create policy "allow all" on trinity_triggers for all using (true);
+#
+def set_trigger(profile_id, note, fire_at, recurring=False, interval_minutes=None):
+    try:
+        supabase.table("trinity_triggers").insert({
+            "profile_id":       profile_id,
+            "note":             note,
+            "fire_at":          fire_at,
+            "recurring":        recurring,
+            "interval_minutes": interval_minutes,
+            "active":           True
+        }).execute()
+        return {"status": "scheduled", "note": note, "fire_at": fire_at}
+    except Exception as e:
+        return {"error": str(e)}
+
+def cancel_trigger(profile_id, trigger_id):
+    try:
+        supabase.table("trinity_triggers")\
+            .update({"active": False})\
+            .eq("profile_id", profile_id)\
+            .eq("id", trigger_id)\
+            .execute()
+        return {"status": "cancelled", "id": trigger_id}
+    except Exception as e:
+        return {"error": str(e)}
+
+def get_triggers(profile_id):
+    try:
+        result = supabase.table("trinity_triggers")\
+            .select("id, note, fire_at, recurring, interval_minutes, created_at")\
+            .eq("profile_id", profile_id)\
+            .eq("active", True)\
+            .order("fire_at", desc=False)\
+            .execute()
+        return result.data or []
+    except Exception as e:
+        return []
+
+def pop_due_triggers(profile_id):
+    """Return triggers whose fire_at has passed. Deactivates one-shot; advances recurring."""
+    from datetime import datetime, timezone, timedelta
+    try:
+        now    = datetime.now(timezone.utc)
+        result = supabase.table("trinity_triggers")\
+            .select("*")\
+            .eq("profile_id", profile_id)\
+            .eq("active", True)\
+            .lte("fire_at", now.isoformat())\
+            .execute()
+        due = result.data or []
+        for t in due:
+            if t.get("recurring") and t.get("interval_minutes"):
+                next_fire = (now + timedelta(minutes=t["interval_minutes"])).isoformat()
+                supabase.table("trinity_triggers")\
+                    .update({"fire_at": next_fire})\
+                    .eq("id", t["id"])\
+                    .execute()
+            else:
+                supabase.table("trinity_triggers")\
+                    .update({"active": False})\
+                    .eq("id", t["id"])\
+                    .execute()
+        return due
+    except Exception as e:
+        return []
+
+
 def delete_calendar_event(profile_id, title):
     """Delete a calendar event by title (case-insensitive partial match)."""
     try:

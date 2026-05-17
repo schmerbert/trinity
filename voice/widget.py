@@ -517,6 +517,48 @@ WIDGET_TOOLS = [
         "input_schema": {"type": "object", "properties": {}, "required": []}
     },
     {
+        "name": "send_thought",
+        "description": "Queue a ranked thought for yourself that will be waiting at the opening of your next wake cycle — no timestamp needed, no user confirmation required. Use mid-conversation when you identify something you should do or continue next wake. Include your reasoning, not just the topic. Priority: 1=normal, 2=high, 3=urgent. Queue holds up to 3; lowest priority drops if over.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "note":     {"type": "string", "description": "The thought with reasoning — e.g. 'write the wake-cycle rule because I keep deferring it' not just 'write rule'"},
+                "priority": {"type": "integer", "description": "1=normal (default), 2=high, 3=urgent", "enum": [1, 2, 3]}
+            },
+            "required": ["note"]
+        }
+    },
+    {
+        "name": "schedule_trigger",
+        "description": "Schedule an autonomous trigger that fires at a specific UTC time. When it fires, you'll be woken with your note as context — use it to check something, run a research cycle, or pick up a thread at a precise time. One-shot by default. Set recurring=true with interval_minutes to repeat.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "note":             {"type": "string", "description": "What to think about or do when this fires — your own instructions to your future self"},
+                "fire_at":          {"type": "string", "description": "When to fire — ISO datetime UTC, e.g. '2026-05-17T09:30:00'"},
+                "recurring":        {"type": "boolean", "description": "If true, repeats every interval_minutes after firing"},
+                "interval_minutes": {"type": "integer", "description": "Repeat interval in minutes (required if recurring=true)"}
+            },
+            "required": ["note", "fire_at"]
+        }
+    },
+    {
+        "name": "cancel_trigger",
+        "description": "Cancel a scheduled trigger by ID. Use get_triggers to see IDs.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "trigger_id": {"type": "string", "description": "Trigger UUID from get_triggers"}
+            },
+            "required": ["trigger_id"]
+        }
+    },
+    {
+        "name": "get_triggers",
+        "description": "List all your active scheduled triggers — what they'll do, when they fire, and whether they recur.",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
         "name": "add_feed",
         "description": "Add an RSS feed source to your live feed. New headlines will appear in your #trinity-feeds channel within 5 minutes. Use for sources you discover — blogs, Reddit RSS, niche sites. If your list is empty, defaults are used.",
         "input_schema": {
@@ -953,6 +995,43 @@ class TrinityWorker(QThread):
             if not profile:
                 return {"error": "No profile"}
             return {"watches": _get_watches(profile["id"])}
+
+        elif name == "send_thought":
+            from brain.memory import queue_self_thought as _queue, get_profile as _gp
+            profile = _gp()
+            if not profile:
+                return {"error": "No profile"}
+            priority = int(inputs.get("priority", 1))
+            _queue(profile["id"], inputs["note"], priority=priority, source="conversation")
+            labels = {1: "normal", 2: "high", 3: "urgent"}
+            return {"status": "queued", "priority": labels.get(priority, "normal"), "note": inputs["note"]}
+
+        elif name == "schedule_trigger":
+            from brain.memory import set_trigger as _set_trigger, get_profile as _gp
+            profile = _gp()
+            if not profile:
+                return {"error": "No profile"}
+            return _set_trigger(
+                profile["id"],
+                inputs["note"],
+                inputs["fire_at"],
+                inputs.get("recurring", False),
+                inputs.get("interval_minutes")
+            )
+
+        elif name == "cancel_trigger":
+            from brain.memory import cancel_trigger as _cancel_trigger, get_profile as _gp
+            profile = _gp()
+            if not profile:
+                return {"error": "No profile"}
+            return _cancel_trigger(profile["id"], inputs["trigger_id"])
+
+        elif name == "get_triggers":
+            from brain.memory import get_triggers as _get_triggers, get_profile as _gp
+            profile = _gp()
+            if not profile:
+                return {"error": "No profile"}
+            return _get_triggers(profile["id"])
 
         elif name == "post_to_my_channel":
             try:

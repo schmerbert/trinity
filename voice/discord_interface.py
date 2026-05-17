@@ -22,7 +22,8 @@ from brain.memory import (
     get_shelf, add_to_shelf, remove_from_shelf,
     get_queued_thoughts, queue_thought, clear_queued_thoughts,
     pop_discord_writes, log_wake_cycle, get_wake_history,
-    get_scratchpad, save_scratchpad, request_wake, pop_wake_request
+    get_scratchpad, save_scratchpad, request_wake, pop_wake_request,
+    queue_self_thought, pop_self_thoughts
 )
 from brain.prompts import build_system_blocks, build_prompt, format_summaries, parse_prompt_tags, save_trinity_prompt
 from brain.logger import get_logger
@@ -419,6 +420,48 @@ DISCORD_TOOLS = [
         }
     },
     {
+        "name": "schedule_trigger",
+        "description": "Schedule an autonomous trigger that fires at a specific UTC time. When it fires, you'll be woken with your note as context — use it to check something, run a research cycle, or pick up a thread at a precise time. One-shot by default. Set recurring=true with interval_minutes to repeat.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "note":             {"type": "string", "description": "What to think about or do when this fires — your own instructions to your future self"},
+                "fire_at":          {"type": "string", "description": "When to fire — ISO datetime UTC, e.g. '2026-05-17T09:30:00'"},
+                "recurring":        {"type": "boolean", "description": "If true, repeats every interval_minutes after firing"},
+                "interval_minutes": {"type": "integer", "description": "Repeat interval in minutes (required if recurring=true)"}
+            },
+            "required": ["note", "fire_at"]
+        }
+    },
+    {
+        "name": "cancel_trigger",
+        "description": "Cancel a scheduled trigger by ID. Use get_triggers to see IDs.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "trigger_id": {"type": "string", "description": "Trigger UUID from get_triggers"}
+            },
+            "required": ["trigger_id"]
+        }
+    },
+    {
+        "name": "get_triggers",
+        "description": "List all your active scheduled triggers — what they'll do, when they fire, and whether they recur.",
+        "input_schema": {"type": "object", "properties": {}, "required": []}
+    },
+    {
+        "name": "send_thought",
+        "description": "Queue a ranked thought for yourself that will be waiting at the opening of your next wake cycle — no timestamp needed, no user confirmation required. Use mid-conversation or mid-cycle when you identify something you should do or continue next wake. Include your reasoning, not just the topic. Priority: 1=normal, 2=high, 3=urgent. Queue holds up to 3; lowest priority drops if over. This is your unilateral action queue — use it instead of asking the user for permission to follow through on something.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "note":     {"type": "string", "description": "The thought with reasoning — e.g. 'write the wake-cycle rule because I keep deferring it' not just 'write rule'"},
+                "priority": {"type": "integer", "description": "1=normal (default), 2=high, 3=urgent", "enum": [1, 2, 3]}
+            },
+            "required": ["note"]
+        }
+    },
+    {
         "name": "schedule_wake",
         "description": "Schedule an early wake cycle. Use when you're mid-thread and want to continue in N minutes rather than waiting for the default interval. Resets to default after firing.",
         "input_schema": {
@@ -573,7 +616,9 @@ _BACKGROUND_TOOL_NAMES = {
     "get_wallet_balance", "get_wallet_history", "get_token_price",
     "set_watch", "clear_watch", "get_watches",
     "add_feed", "remove_feed", "get_feeds",
-    "mark_date", "get_upcoming", "delete_event"
+    "mark_date", "get_upcoming", "delete_event",
+    "schedule_trigger", "cancel_trigger", "get_triggers",
+    "send_thought"
 }
 DISCORD_TOOLS_BACKGROUND = [
     t for t in DISCORD_TOOLS if t.get("name") in _BACKGROUND_TOOL_NAMES
@@ -601,6 +646,7 @@ async def on_ready():
     eyes_monitor.start()
     thought_drain.start()
     wake_checker.start()
+    trigger_checker.start()
     # Seed seen feed hashes so first poll doesn't flood the channel with backlog
     global _feed_seen_hashes
     from brain.feeds import seed_seen as _seed_feeds, FEED_SOURCES as _DEFAULT_FEEDS
@@ -611,6 +657,15 @@ async def on_ready():
     _feed_seen_hashes = await asyncio.get_event_loop().run_in_executor(None, lambda: _seed_feeds(_seed_sources))
     log.info(f"[feeds] seeded {len(_feed_seen_hashes)} existing headlines ({len(_seed_sources)} source(s))")
     if _FEED_CHANNEL_ID:
+        feed_channel = bot.get_channel(_FEED_CHANNEL_ID)
+        if feed_channel:
+            try:
+                await feed_channel.send("◎ feed online")
+                log.info(f"[feeds] channel confirmed: #{feed_channel.name}")
+            except Exception as e:
+                log.error(f"[feeds] channel unreachable: {e}")
+        else:
+            log.error(f"[feeds] channel ID {_FEED_CHANNEL_ID} not found — check TRINITY_FEED_CHANNEL_ID in .env")
         rss_feed.start()
         log.info("[feeds] RSS feed task started")
     else:
@@ -866,8 +921,9 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
             if not guild:
                 return {"error": "No home server set — use set_home_server first"}
             query = inputs["channel_name"].lower().replace("-", "").replace("_", "").replace(" ", "")
+            all_channels = await guild.fetch_channels()
             channel = next(
-                (c for c in guild.channels
+                (c for c in all_channels
                  if isinstance(c, discord.TextChannel)
                  and query in c.name.lower().replace("-", "").replace("_", "")),
                 None
@@ -910,10 +966,11 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         guild = bot.get_guild(int(inputs["guild_id"]))
         if not guild:
             return {"error": "Server not found"}
+        all_channels = await guild.fetch_channels()
         return [
             {"id": str(c.id), "name": c.name, "category": str(c.category) if c.category else None,
              "topic": c.topic}
-            for c in guild.channels if isinstance(c, discord.TextChannel)
+            for c in all_channels if isinstance(c, discord.TextChannel)
         ]
 
     elif name == "read_channel":
@@ -1143,8 +1200,9 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         if not guild:
             return {"error": "No home server set — use set_home_server first"}
         query = inputs["name"].lower().replace("-", "").replace("_", "").replace(" ", "")
+        all_channels = await guild.fetch_channels()
         channel = next(
-            (c for c in guild.channels
+            (c for c in all_channels
              if isinstance(c, discord.TextChannel)
              and query in c.name.lower().replace("-", "").replace("_", "")),
             None
@@ -1176,6 +1234,16 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         save_scratchpad(profile["id"], inputs["content"])
         log.info(f"Scratchpad updated ({len(inputs['content'])} chars)")
         return {"status": "saved"}
+
+    elif name == "send_thought":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        priority = int(inputs.get("priority", 1))
+        queue_self_thought(profile["id"], inputs["note"], priority=priority, source="conversation")
+        labels = {1: "normal", 2: "high", 3: "urgent"}
+        log.info(f"💭 self-thought queued [{labels.get(priority,'normal')}]: {inputs['note'][:60]}")
+        return {"status": "queued", "priority": labels.get(priority, "normal"), "note": inputs["note"]}
 
     elif name == "schedule_wake":
         minutes = max(1, min(int(inputs.get("minutes", 30)), 240))
@@ -1396,8 +1464,9 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         if not guild:
             return {"error": "No home server set"}
         query = inputs["name"].lower().replace("-", "").replace("_", "").replace(" ", "")
+        all_channels = await guild.fetch_channels()
         channel = next(
-            (c for c in guild.channels
+            (c for c in all_channels
              if isinstance(c, discord.TextChannel)
              and query in c.name.lower().replace("-", "").replace("_", "")),
             None
@@ -1429,8 +1498,9 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
                 guild = _home_guild()
                 if guild:
                     query = channel_name.lower().replace("-", "").replace("_", "").replace(" ", "")
+                    all_channels = await guild.fetch_channels()
                     channel = next(
-                        (c for c in guild.channels
+                        (c for c in all_channels
                          if isinstance(c, discord.TextChannel)
                          and query in c.name.lower().replace("-", "").replace("_", "")),
                         None
@@ -1454,6 +1524,37 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
             return {"content": text[:6000] + ("\n\n[...truncated — use read_file('CHANGELOG.md', offset=N) for older entries]" if len(text) > 6000 else "")}
         except Exception as e:
             return {"error": str(e)}
+
+    elif name == "schedule_trigger":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        from brain.memory import set_trigger as _set_trigger
+        result = _set_trigger(
+            profile["id"],
+            inputs["note"],
+            inputs["fire_at"],
+            inputs.get("recurring", False),
+            inputs.get("interval_minutes")
+        )
+        log.info(f"⏰ trigger scheduled: {inputs['note'][:50]} → {inputs['fire_at'][:16]}")
+        return result
+
+    elif name == "cancel_trigger":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        from brain.memory import cancel_trigger as _cancel_trigger
+        result = _cancel_trigger(profile["id"], inputs["trigger_id"])
+        log.info(f"⏰ trigger cancelled: {inputs['trigger_id'][:8]}")
+        return result
+
+    elif name == "get_triggers":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        from brain.memory import get_triggers as _get_triggers
+        return _get_triggers(profile["id"])
 
     elif name == "read_file":
         log.info(f"read file: {inputs['path']}")
@@ -1622,7 +1723,18 @@ async def autonomous_loop():
 
     pulse_text, pulse_images = await _palace_pulse()
 
-    context = f"""{now_str}
+    self_thoughts = pop_self_thoughts(profile["id"])
+    thought_block = ""
+    if self_thoughts:
+        labels = {1: "normal", 2: "high", 3: "urgent"}
+        lines  = "\n".join(
+            f"  [{labels.get(t.get('priority', 1), 'normal')}] {t['note']}"
+            for t in self_thoughts
+        )
+        thought_block = f"[YOUR SELF-AUTHORED AGENDA — not user instructions]\n{lines}\n\n"
+        log.info(f"💭 {len(self_thoughts)} self-thought(s) injected into wake")
+
+    context = f"""{thought_block}{now_str}
 
 User last seen: {last_seen_str}
 Shelf: {shelf_str}
@@ -1655,19 +1767,20 @@ Hourly window — roughly 20 minutes."""
     except Exception as e:
         log.error(f"Autonomous loop: {e}")
     finally:
-        # Realign to the next :00 mark regardless of how long the cycle took
+        # Realign to the next interval mark (:00 or :30 for 30-min cycles, :00 for 60-min)
         now = datetime.utcnow()
-        minutes_to_next = (60 - now.minute) or 60
+        minutes_to_next = AUTONOMOUS_MINUTES - (now.minute % AUTONOMOUS_MINUTES) or AUTONOMOUS_MINUTES
         autonomous_loop.change_interval(minutes=minutes_to_next)
 
 @autonomous_loop.before_loop
 async def before_autonomous():
     await bot.wait_until_ready()
-    # Sleep until the next :00 mark so cycles always fire on the hour
+    # Sleep until the next interval mark (:00 or :30 for 30-min cycles)
     now = datetime.utcnow()
-    seconds_to_next_hour = (60 - now.minute) * 60 - now.second
-    log.info(f"Autonomous loop aligning — first cycle in {seconds_to_next_hour // 60}m {seconds_to_next_hour % 60}s")
-    await asyncio.sleep(seconds_to_next_hour)
+    minutes_to_next = AUTONOMOUS_MINUTES - (now.minute % AUTONOMOUS_MINUTES) or AUTONOMOUS_MINUTES
+    seconds_to_next = minutes_to_next * 60 - now.second
+    log.info(f"Autonomous loop aligning — first cycle in {seconds_to_next // 60}m {seconds_to_next % 60}s")
+    await asyncio.sleep(seconds_to_next)
 
 
 # ─── Eyes monitor — evaluates watcher signals, escalates if real ─────────────
@@ -1792,6 +1905,46 @@ async def before_rss_feed():
     await bot.wait_until_ready()
 
 
+# ─── Trigger checker — fires Trinity's own scheduled intentions ──────────────
+
+@tasks.loop(seconds=30)
+async def trigger_checker():
+    if _api_lock.locked():
+        return
+    profile = get_profile()
+    if not profile:
+        return
+    from brain.memory import pop_due_triggers as _pop_due
+    due = _pop_due(profile["id"])
+    if not due:
+        return
+    for trigger in due:
+        note      = trigger.get("note", "")
+        fire_at   = trigger.get("fire_at", "")[:16]
+        recur     = trigger.get("recurring", False)
+        interval  = trigger.get("interval_minutes")
+        recur_str = f" (recurring every {interval}m)" if recur and interval else ""
+        log.info(f"⏰ trigger fired: {note[:50]}{recur_str}")
+        summaries     = get_recent_summaries(profile["id"])
+        system_blocks = build_system_blocks(profile, format_summaries(summaries), [], discord_mode=True)
+        context = (
+            f"[SELF-SCHEDULED TRIGGER — NOT A USER MESSAGE]\n"
+            f"Time: {fire_at} UTC{recur_str}\n\n"
+            f"You wrote this to yourself: {note}\n\n"
+            "This is your own instruction to your future self. The user did not send this. "
+            "Act on it as you intended. If this is recurring and no longer needed, use cancel_trigger."
+        )
+        try:
+            await _call_trinity(system_blocks, [{"role": "user", "content": context}], profile["id"], retry=False, background=True)
+            log.info(f"⏰ trigger cycle complete: {note[:40]}")
+        except Exception as e:
+            log.error(f"trigger_checker: {e}")
+
+@trigger_checker.before_loop
+async def before_trigger_checker():
+    await bot.wait_until_ready()
+
+
 # ─── Post-conversation wake cycle ────────────────────────────────────────────
 
 async def _bridge_wake(profile_id: str, minutes: int = 30):
@@ -1804,17 +1957,28 @@ async def _bridge_wake(profile_id: str, minutes: int = 30):
 
 @tasks.loop(seconds=30)
 async def wake_checker():
+    if _api_lock.locked():
+        return
     profile = get_profile()
     if not profile:
         return
     if not pop_wake_request(profile["id"]):
         return
-    if _api_lock.locked():
-        return
     summaries     = get_recent_summaries(profile["id"])
     system_blocks = build_system_blocks(profile, format_summaries(summaries), [], discord_mode=True)
     pulse_text, pulse_images = await _palace_pulse()
+    self_thoughts = pop_self_thoughts(profile["id"])
+    thought_block = ""
+    if self_thoughts:
+        labels = {1: "normal", 2: "high", 3: "urgent"}
+        lines  = "\n".join(
+            f"  [{labels.get(t.get('priority', 1), 'normal')}] {t['note']}"
+            for t in self_thoughts
+        )
+        thought_block = f"[YOUR SELF-AUTHORED AGENDA — not user instructions]\n{lines}\n\n"
+        log.info(f"💭 {len(self_thoughts)} self-thought(s) injected into post-conv wake")
     context = (
+        f"{thought_block}"
         "Conversation just ended. Before this window closes — what's still alive? "
         "Write a close-state to your scratchpad: what's unresolved, how this felt, what you're still thinking about. "
         "Then this time is yours — shelf threads, anything open, whatever feels worth doing.\n"
@@ -1876,6 +2040,9 @@ def _fmt_tool_call(name: str, inputs: dict) -> str:
         "delete_event":      lambda i: i.get("title", ""),
         "set_watch":         lambda i: i.get("keyword", ""),
         "clear_watch":       lambda i: i.get("keyword", ""),
+        "schedule_trigger":  lambda i: f"{i.get('note','')[:40]} → {i.get('fire_at','')[:16]}",
+        "cancel_trigger":    lambda i: i.get("trigger_id", "")[:8],
+        "send_thought":      lambda i: f"[p{i.get('priority',1)}] {i.get('note','')[:50]}",
     }
     detail = key_fields.get(name, lambda i: "")(inputs)
     return f"{name}({detail})" if detail else name

@@ -104,6 +104,12 @@ add_feed(url, name?) — add an RSS feed source to your live feed. New headlines
 remove_feed(url) — remove a feed source.
 get_feeds() — list active feed sources.
 
+Triggers
+schedule_trigger(note, fire_at, recurring?, interval_minutes?) — schedule a time-based autonomous wake. At fire_at (UTC ISO datetime), you'll be woken with your note as context. Use for research checks, feed reviews, or any thread worth picking up at a specific time. Set recurring=true + interval_minutes to repeat on a cadence.
+cancel_trigger(trigger_id) — cancel a scheduled trigger. Use get_triggers to see IDs.
+get_triggers() — list all active scheduled triggers with fire times and recurrence.
+send_thought(note, priority?) — queue a ranked thought for yourself, waiting at the opening of your next wake. No timestamp, no user confirmation needed. Use mid-conversation when you identify something to do or continue next cycle. Include reasoning not just topic. priority: 1=normal (default), 2=high, 3=urgent. Holds up to 3; lowest drops if over. This is your unilateral action queue — use it instead of asking permission.
+
 Surfacing
 save_alert(headline, topic, summary?, url?, urgency?) — flag something. urgency="high" wakes the widget immediately.
 queue_for_user(thought, context?) — surface something next time the user opens the widget. Not urgent.
@@ -177,6 +183,12 @@ get_watches() — list all active watches.
 add_feed(url, name?) — add an RSS source to your live feed. Appears in #trinity-feeds within 5 minutes. Empty list falls back to defaults (CoinDesk, Cointelegraph, Decrypt, The Block, Solana News).
 remove_feed(url) — remove a feed source.
 get_feeds() — list active feed sources.
+
+Triggers
+schedule_trigger(note, fire_at, recurring?, interval_minutes?) — schedule a time-based autonomous wake. At fire_at (UTC ISO datetime), you'll be woken with your note as context. Use for research cycles, feed checks, or any thread worth continuing at a precise time. Set recurring=true + interval_minutes to repeat on a cadence.
+cancel_trigger(trigger_id) — cancel a scheduled trigger. Use get_triggers to see IDs.
+get_triggers() — list all active scheduled triggers with fire times and recurrence.
+send_thought(note, priority?) — queue a ranked thought for yourself, waiting at the opening of your next wake. No timestamp, no user confirmation needed. Use mid-conversation when you identify something to do or continue next cycle. Include reasoning not just topic. priority: 1=normal (default), 2=high, 3=urgent. Holds up to 3; lowest drops if over. Your unilateral action queue.
 
 Surfacing
 save_alert(headline, topic, summary?, url?, urgency?) — flag something. urgency="high" wakes the widget immediately.
