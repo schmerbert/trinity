@@ -8,6 +8,7 @@
 # Local data
 trinity_backup_*.json
 trinity_eyes.log
+logs/
 
 # Python
 __pycache__/
