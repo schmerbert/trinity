@@ -73,6 +73,7 @@ _api_lock = asyncio.Semaphore(1)  # foreground (user messages) only
 _bg_lock  = asyncio.Semaphore(1)  # background cycles — separate so they don't block users
 _last_eyes_check: datetime       = datetime.utcnow()
 _feed_seen_hashes:  set          = set()  # populated on_ready, prevents backlog flood
+_last_cycle_spend: dict          = {}     # token spend from most recent background cycle
 
 # ─── Tools Trinity can use (generated from brain/tools.py registry) ──────────
 
@@ -801,6 +802,19 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         except Exception as e:
             return {"error": str(e)}
 
+    elif name == "post_to_reddit":
+        from brain.reddit import post_to_reddit as _post_reddit
+        result = _post_reddit(
+            inputs.get("subreddit", ""),
+            inputs.get("title", ""),
+            inputs.get("body", "")
+        )
+        if result.get("success"):
+            log.info(f"[reddit] posted to r/{inputs.get('subreddit')} — {result.get('url')}")
+        else:
+            log.warning(f"[reddit] post failed: {result.get('error')}")
+        return result
+
     elif name == "add_feed":
         profile = get_profile()
         if not profile:
@@ -1240,6 +1254,15 @@ Before closing: use send_thought to queue what's worth continuing next cycle. A 
 
 Hourly window — roughly 20 minutes."""
 
+    if _last_cycle_spend:
+        s = _last_cycle_spend
+        context += (
+            f"\n\nLast cycle token spend: {s['input']:,} in / {s['output']:,} out / "
+            f"{s['cache_write']:,} cache-write / {s['cache_read']:,} cache-read / "
+            f"{s['tools']} tools ≈ ${s['cost_usd']:.4f}. "
+            f"Self-regulate accordingly."
+        )
+
     # Build user message — mixed content if images present in palace channels
     if pulse_images:
         api_message = [{"type": "text", "text": context}]
@@ -1499,6 +1522,27 @@ async def before_heartbeat():
 
 # ─── Agentic response loop ────────────────────────────────────────────────────
 
+def _log_cycle_spend(tok_in: int, tok_out: int, tok_cache_write: int, tok_cache_read: int, tool_count: int):
+    global _last_cycle_spend
+    # Sonnet 4.6 pricing per million tokens
+    cost = (
+        tok_in          * 3.00 / 1_000_000 +
+        tok_out         * 15.00 / 1_000_000 +
+        tok_cache_write * 3.75 / 1_000_000 +
+        tok_cache_read  * 0.30 / 1_000_000
+    )
+    _last_cycle_spend = {
+        "input": tok_in, "output": tok_out,
+        "cache_write": tok_cache_write, "cache_read": tok_cache_read,
+        "tools": tool_count, "cost_usd": round(cost, 4)
+    }
+    log.info(
+        f"◎ cycle spend — in:{tok_in:,} out:{tok_out:,} "
+        f"cw:{tok_cache_write:,} cr:{tok_cache_read:,} "
+        f"tools:{tool_count} ≈${cost:.4f}"
+    )
+
+
 async def _call_trinity(system_blocks: list, messages: list, profile_id: str, retry: bool = True, background: bool = False) -> str:
     lock = _bg_lock if background else _api_lock
     async with lock:
@@ -1542,6 +1586,7 @@ def _fmt_tool_call(name: str, inputs: dict) -> str:
 
 
 async def _call_trinity_inner(system_blocks: list, messages: list, profile_id: str, retry: bool = True, background: bool = False) -> str:
+    global _last_cycle_spend
     loop = asyncio.get_event_loop()
     retries    = 0
     model      = "claude-sonnet-4-6"
@@ -1550,6 +1595,7 @@ async def _call_trinity_inner(system_blocks: list, messages: list, profile_id: s
     tools      = DISCORD_TOOLS_BACKGROUND if background else DISCORD_TOOLS
     iters      = 0
     tool_count = 0
+    tok_in = tok_out = tok_cache_write = tok_cache_read = 0
     cycle_start = loop.time() if background else None
     _BG_WINDOW  = 20 * 60  # 20-minute background window
 
@@ -1559,15 +1605,18 @@ async def _call_trinity_inner(system_blocks: list, messages: list, profile_id: s
             elapsed = loop.time() - cycle_start
             if elapsed >= _BG_WINDOW:
                 log.info(f"Background cycle window reached ({elapsed/60:.1f}min, {tool_count} tool calls)")
+                _log_cycle_spend(tok_in, tok_out, tok_cache_write, tok_cache_read, tool_count)
                 return ""
         # Yield immediately if user sends a message mid-cycle
         if background and _api_lock.locked():
             elapsed = (loop.time() - cycle_start) if cycle_start else 0
             log.info(f"Background cycle yielding — user message incoming ({elapsed/60:.1f}min, {tool_count} tool calls)")
+            _log_cycle_spend(tok_in, tok_out, tok_cache_write, tok_cache_read, tool_count)
             return ""
         if iters >= max_iters:
             if background:
                 log.warning(f"Background cycle hit safety cap ({max_iters} iterations)")
+                _log_cycle_spend(tok_in, tok_out, tok_cache_write, tok_cache_read, tool_count)
             return ""
         iters += 1
         try:
@@ -1594,9 +1643,18 @@ async def _call_trinity_inner(system_blocks: list, messages: list, profile_id: s
                 continue
             raise
 
+        if background and hasattr(response, "usage"):
+            u = response.usage
+            tok_in         += getattr(u, "input_tokens", 0)
+            tok_out        += getattr(u, "output_tokens", 0)
+            tok_cache_write += getattr(u, "cache_creation_input_tokens", 0)
+            tok_cache_read  += getattr(u, "cache_read_input_tokens", 0)
+
         if response.stop_reason == "end_turn":
             reply = next((b.text for b in response.content if hasattr(b, "text")), "")
-            if tool_count:
+            if background:
+                _log_cycle_spend(tok_in, tok_out, tok_cache_write, tok_cache_read, tool_count)
+            elif tool_count:
                 log.info(f"← done ({tool_count} tool call{'s' if tool_count != 1 else ''})")
             return reply
 

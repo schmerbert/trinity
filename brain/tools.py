@@ -854,6 +854,24 @@ _REGISTRY = [
         "interfaces":  {"discord", "widget"},
         "background":  True,
     },
+    {
+        "name": "post_to_reddit",
+        "description": "Post a text submission to a subreddit. Use for publishing theses, observations, or analysis under Trinity's own account. Posts to the practice subreddit first to verify formatting before going public. Trinity holds the post/no-post decision.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "subreddit": {"type": "string", "description": "Subreddit name without r/ prefix (e.g. 'investing' or 'TrinityPractice')"},
+                "title":     {"type": "string", "description": "Post title"},
+                "body":      {"type": "string", "description": "Post body (markdown supported)"}
+            },
+            "required": ["subreddit", "title", "body"]
+        },
+        "capability":  "post_to_reddit(subreddit, title, body) — publish a text post to Reddit. Use the practice subreddit first. Trinity decides what to post and when.",
+        "category":    "self",
+        "interfaces":  {"discord"},
+        "background":  True,
+        "timeout":     30,
+    },
 ]
 
 # ── Section ordering for capability string generation ─────────────────────────

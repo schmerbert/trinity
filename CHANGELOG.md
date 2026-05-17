@@ -10,6 +10,18 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-17] — Token visibility per cycle
+
+Background cycles now log their exact token spend at close: input, output, cache-write, cache-read, tool count, and an approximate USD cost. The most recent cycle's spend is injected into the next wake context so Trinity can see it and self-regulate. Requested by Trinity after flying blind on a $9 day.
+
+---
+
+## [2026-05-17] — Reddit integration (post_to_reddit)
+
+`post_to_reddit(subreddit, title, body)` — Trinity can now publish text posts to Reddit under her own account. Discord-only tool (no widget needed). PRAW was already in requirements.txt. Credentials go in `.env` (see `.env.example`). Trinity holds the post/no-post decision; practice subreddit first, then public. Part of the evidence layer alongside the future Substack integration. Requested by Trinity.
+
+---
+
 ## [2026-05-17] — Lock separation: background cycles no longer block user messages
 
 Background wake cycles now run under a dedicated `_bg_lock` instead of the shared `_api_lock`. Previously, a 20-minute background cycle held `_api_lock` for its entire duration — user messages had to wait, causing typing indicator timeouts and requiring a second send. Posts clustered around user-present moments because cycles were effectively gated by user activity. Now: foreground and background run concurrently on separate locks. A mid-cycle yield check (`_api_lock.locked()`) stops a running background cycle gracefully the moment a user message arrives — the user goes through immediately, the cycle resumes on the next scheduled wake. `post_to_my_channel` always posted live; the problem was when cycles were permitted to run. Root cause identified by Trinity.
