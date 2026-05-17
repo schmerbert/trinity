@@ -5,7 +5,7 @@ import urllib.parse
 
 def ddg_search(query, max_results=6):
     try:
-        from duckduckgo_search import DDGS
+        from ddgs import DDGS
         with DDGS() as ddg:
             results = list(ddg.text(query, max_results=min(max_results, 10)))
         return [

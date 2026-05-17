@@ -10,4 +10,4 @@ kokoro-onnx
 pygame
 PyQt6
 discord.py
-duckduckgo-search
+ddgs
