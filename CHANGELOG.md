@@ -10,6 +10,14 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-17] — Tool call timeouts + send_image filename fix
+
+Tool calls in the Discord autonomous loop no longer hang indefinitely. Each tool now has a configurable timeout (`web_search` 30s, `generate_image` 90s, network calls 15–20s, default 30s). On timeout, a structured error is returned so Trinity can reason about the stall and continue rather than blocking. Requested by Trinity after a deliberate stress test surfaced the hang.
+
+`send_image` filename bug fixed — images were coming through as document icons instead of inline previews when sent via the `generate_image` → `send_image` two-step path. Root cause: filename was derived from the URL-encoded prompt text, which Discord didn't reliably recognize as an image. Now uses a clean content-type-derived name (`image.jpg`, `image.png`, etc.) always.
+
+---
+
 ## [2026-05-16] — Wake rhythm simplified
 
 Post-conversation wake machinery removed. Wake cycle is now a clean clock: fires at `:00` and `:30`, skips only if the user messaged in the last 3 minutes. No double fires, no skip flags, no bridge wakes. `wake_checker` remains for Trinity-requested early wakes. Heartbeat logs `◎ alive | next wake: HH:MM UTC` every 10 minutes.

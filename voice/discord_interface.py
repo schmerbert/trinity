@@ -898,6 +898,20 @@ def _home_guild() -> discord.Guild | None:
 
 # ─── Tool execution ───────────────────────────────────────────────────────────
 
+_TOOL_TIMEOUTS: dict[str, int] = {
+    "web_search":        30,
+    "fetch_url":         20,
+    "generate_image":    90,
+    "send_image":        20,
+    "get_coin_data":     15,
+    "get_dex_data":      15,
+    "get_token_price":   15,
+    "get_wallet_balance": 20,
+    "get_wallet_history": 20,
+    "send_email":        15,
+}
+_TOOL_TIMEOUT_DEFAULT = 30
+
 async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list:
     if name == "web_search":
         from brain.search import ddg_search
@@ -955,11 +969,9 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         except Exception as e:
             return {"error": f"Fetch failed: {e}"}
 
-        filename = url.split("/")[-1].split("?")[0] or "image"
-        if "." not in filename:
-            ext_map = {"image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif", "image/webp": ".webp"}
-            ct = content_type.split(";")[0].strip().lower()
-            filename += ext_map.get(ct, ".jpg")
+        ext_map = {"image/jpeg": ".jpg", "image/png": ".png", "image/gif": ".gif", "image/webp": ".webp"}
+        ct = content_type.split(";")[0].strip().lower()
+        filename = f"image{ext_map.get(ct, '.jpg')}"
 
         file = discord.File(io.BytesIO(data), filename=filename)
         await channel.send(content=caption or None, file=file)
@@ -2148,7 +2160,15 @@ async def _call_trinity_inner(system_blocks: list, messages: list, profile_id: s
             for block in response.content:
                 if block.type == "tool_use":
                     log.info(f"→ {_fmt_tool_call(block.name, block.input)}")
-                    result = await _execute_tool(block.name, block.input, profile_id)
+                    _timeout = _TOOL_TIMEOUTS.get(block.name, _TOOL_TIMEOUT_DEFAULT)
+                    try:
+                        result = await asyncio.wait_for(
+                            _execute_tool(block.name, block.input, profile_id),
+                            timeout=_timeout
+                        )
+                    except asyncio.TimeoutError:
+                        log.warning(f"Tool '{block.name}' timed out after {_timeout}s")
+                        result = {"error": f"timeout after {_timeout}s — tool did not respond"}
                     tool_count += 1
                     tool_results.append({
                         "type":        "tool_result",
