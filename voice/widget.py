@@ -1983,16 +1983,11 @@ class TrinityWidget(QMainWindow):
             self.profile = create_profile(text)
             self._awaiting_name = False
             self.input_field.setPlaceholderText("say something...")
-            opening = "Good to meet you. I'm Trinity — here to watch markets, surface signals, and help you think through what matters. What are you currently tracking?"
-            self._display(opening)
-            self.history = [
-                {"role": "user", "content": f"My name is {text}"},
-                {"role": "assistant", "content": opening}
-            ]
-            if self.tts_enabled:
-                self._tts_stop = False
-                self._tts_active = True
-                threading.Thread(target=self._speak, args=(opening,), daemon=True).start()
+            self.history = []
+            self._expand()
+            self._display_user(f"My name is {text}")
+            self._last_input = f"My name is {text}"
+            self._ask_trinity(f"My name is {text}.")
             return
 
         self._expand()
