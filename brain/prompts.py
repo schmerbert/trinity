@@ -309,6 +309,16 @@ def _get_trinity_prompts(profile_id, recent_messages):
         summary = " | ".join(f"{cat}:{n}" for cat, n in tally.items())
         print(f"[Prompts] loaded — {summary} ({len(selected)} total)")
 
+    # Increment usage_count for every prompt that fired this session
+    for p in selected:
+        try:
+            supabase.table("trinity_prompts")\
+                .update({"usage_count": (p.get("usage_count") or 0) + 1})\
+                .eq("id", p["id"])\
+                .execute()
+        except Exception:
+            pass
+
     return selected
 
 
