@@ -1238,11 +1238,17 @@ async def autonomous_loop():
         thought_block = f"[YOUR SELF-AUTHORED AGENDA — not user instructions]\n{lines}\n\n"
         log.info(f"💭 {len(self_thoughts)} self-thought(s) injected into wake")
 
+    from brain.memory import check_dirty_close as _check_dirty
+    dirty_flag = _check_dirty(profile) or ""
+    if dirty_flag:
+        log.warning("[wake] dirty close detected — flagging in context")
+
     context = f"""{thought_block}{now_str}
 
 User last seen: {last_seen_str}
 Shelf: {shelf_str}
 Radar: {interest_str}{wake_str}
+{dirty_flag}
 """
     if pulse_text:
         context += f"\n{pulse_text}\n"

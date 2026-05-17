@@ -289,6 +289,49 @@ def save_scratchpad(profile_id, content, section=None):
     return update_profile(profile_id, {"scratchpad_text": json.dumps(data)})
 
 
+# ─── Session health ───────────────────────────────────────────────────────────
+#
+# SQL (run once in Supabase):
+#   ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_heartbeat timestamptz;
+#   ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_clean_close timestamptz;
+
+def write_heartbeat(profile_id):
+    from datetime import datetime as _dt
+    try:
+        update_profile(profile_id, {"last_heartbeat": _dt.utcnow().isoformat()})
+    except Exception:
+        pass
+
+def write_clean_close(profile_id):
+    from datetime import datetime as _dt
+    try:
+        update_profile(profile_id, {"last_clean_close": _dt.utcnow().isoformat()})
+    except Exception:
+        pass
+
+def check_dirty_close(profile) -> str | None:
+    """Returns a warning string if previous session did not close cleanly, else None."""
+    from datetime import datetime as _dt, timezone as _tz
+    hb  = profile.get("last_heartbeat")
+    lcc = profile.get("last_clean_close")
+    if not hb:
+        return None
+    try:
+        hb_dt  = _dt.fromisoformat(hb.replace("Z", "+00:00")).replace(tzinfo=_tz.utc)
+        lcc_dt = _dt.fromisoformat(lcc.replace("Z", "+00:00")).replace(tzinfo=_tz.utc) if lcc else None
+        if lcc_dt is None or (hb_dt - lcc_dt).total_seconds() > 900:  # 15-min threshold
+            age = int((_dt.now(_tz.utc) - hb_dt).total_seconds() / 60)
+            return (
+                f"[DIRTY CLOSE DETECTED] Previous widget session did not close cleanly "
+                f"(last heartbeat {age}m ago, no matching clean-close). "
+                f"The scratchpad save and conversation summary from that session may be missing. "
+                f"Compensate if relevant context seems absent."
+            )
+    except Exception:
+        pass
+    return None
+
+
 # ─── Calendar ─────────────────────────────────────────────────────────────────
 #
 # create table trinity_calendar (

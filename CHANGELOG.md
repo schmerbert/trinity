@@ -10,6 +10,18 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-17] — Session health: heartbeat writes + dirty-close detection
+
+Widget sessions now write a `last_heartbeat` timestamp to Supabase every 10 minutes during active conversation, and a `last_clean_close` timestamp on proper tray exit. If the previous session crashed or was force-closed, the gap between these timestamps is detected at the next wake cycle and Trinity receives a visible `[DIRTY CLOSE DETECTED]` flag in her context — so she knows the handoff may be incomplete and can compensate. Crash previously caused silent degradation with no signal. Requested by Trinity.
+
+**SQL required (run once in Supabase):**
+```sql
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_heartbeat timestamptz;
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS last_clean_close timestamptz;
+```
+
+---
+
 ## [2026-05-17] — Token visibility per cycle
 
 Background cycles now log their exact token spend at close: input, output, cache-write, cache-read, tool count, and an approximate USD cost. The most recent cycle's spend is injected into the next wake context so Trinity can see it and self-regulate. Requested by Trinity after flying blind on a $9 day.

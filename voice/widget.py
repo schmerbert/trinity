@@ -829,6 +829,11 @@ class TrinityWidget(QMainWindow):
         self._log_poll.timeout.connect(self._poll_activity_log)
         self._init_activity_log()
 
+        # Session heartbeat — writes last_heartbeat every 10 minutes during conversation
+        self._heartbeat_timer = QTimer()
+        self._heartbeat_timer.setInterval(10 * 60 * 1000)
+        self._heartbeat_timer.timeout.connect(self._write_heartbeat)
+
         self._init_trinity()
 
     # --- Window setup ---
@@ -1583,6 +1588,9 @@ class TrinityWidget(QMainWindow):
         self._display_user(text)
         self._last_input = text
         self._log("user", text)
+        if self.profile and not self._heartbeat_timer.isActive():
+            self._write_heartbeat()
+            self._heartbeat_timer.start()
         self._ask_trinity(text)
 
     # --- Sidebar ---
@@ -1629,7 +1637,16 @@ class TrinityWidget(QMainWindow):
             self.raise_()
             self.activateWindow()
 
+    def _write_heartbeat(self):
+        if self.profile:
+            from brain.memory import write_heartbeat as _hb
+            _hb(self.profile["id"])
+
     def _quit(self):
+        if self.profile:
+            from brain.memory import write_clean_close as _wcc
+            _wcc(self.profile["id"])
+        self._heartbeat_timer.stop()
         if self.profile and _SCRATCHPAD and self._scratchpad:
             save_scratchpad(self.profile["id"], self._scratchpad._text.toPlainText())
         if self.profile and len(self.history) > 2:
