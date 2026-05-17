@@ -302,15 +302,24 @@ WIDGET_TOOLS = [
     },
     {
         "name": "get_scratchpad",
-        "description": "Read your persistent scratchpad — your working surface across all sessions.",
-        "input_schema": {"type": "object", "properties": {}, "required": []}
+        "description": "Read your persistent scratchpad. Omit section to get all sections as a dict. Pass a section key to read just that section. Sections: architecture, arc, wallet, pending, channel-map, shelf-summary, general.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "section": {"type": "string", "description": "Specific section to read (optional)"}
+            },
+            "required": []
+        }
     },
     {
         "name": "write_scratchpad",
-        "description": "Update your persistent scratchpad. Overwrites current content.",
+        "description": "Write to your persistent scratchpad. Pass a section to update only that section — other sections are untouched. Omit section to write into 'general'. Sections: architecture, arc, wallet, pending, channel-map, shelf-summary, general.",
         "input_schema": {
             "type": "object",
-            "properties": {"content": {"type": "string"}},
+            "properties": {
+                "content": {"type": "string"},
+                "section": {"type": "string", "description": "Section to update (optional — defaults to 'general')"}
+            },
             "required": ["content"]
         }
     },
@@ -750,13 +759,18 @@ class TrinityWorker(QThread):
 
         elif name == "get_scratchpad":
             from brain.memory import get_scratchpad as _gs
-            return {"content": _gs(self.profile_id)}
+            section = inputs.get("section")
+            result = _gs(self.profile_id, section)
+            return {"section": section, "content": result} if section else {"sections": result}
 
         elif name == "write_scratchpad":
-            from brain.memory import save_scratchpad as _ss
-            _ss(self.profile_id, inputs["content"])
-            self.scratchpad_write.emit(inputs["content"])
-            return {"status": "saved"}
+            from brain.memory import save_scratchpad as _ss, get_scratchpad as _gs
+            section = inputs.get("section")
+            _ss(self.profile_id, inputs["content"], section)
+            full = _gs(self.profile_id)
+            parts = [f"[{k}]\n{v}" for k, v in full.items() if v] if isinstance(full, dict) else [str(full)]
+            self.scratchpad_write.emit("\n\n".join(parts))
+            return {"status": "saved", "section": section or "general"}
 
         elif name == "read_discord_channel":
             return self._read_discord_channel(
@@ -1535,7 +1549,11 @@ class TrinityWidget(QMainWindow):
             if _SCRATCHPAD and self._scratchpad:
                 saved = get_scratchpad(self.profile["id"])
                 if saved:
-                    self._scratchpad._text.setPlainText(saved)
+                    if isinstance(saved, dict):
+                        parts = [f"[{k}]\n{v}" for k, v in saved.items() if v]
+                        self._scratchpad._text.setPlainText("\n\n".join(parts))
+                    else:
+                        self._scratchpad._text.setPlainText(str(saved))
             self._last_input = opening
             self._ask_trinity(opening)
             self._alert_poll.start()

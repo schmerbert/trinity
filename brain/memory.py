@@ -3,6 +3,7 @@
 # Licensed under GNU GPL v3 — see LICENSE file for details
 
 import os
+import json
 from supabase import create_client
 from dotenv import load_dotenv
 
@@ -252,12 +253,40 @@ def pop_wake_request(profile_id):
 #
 # alter table profiles add column if not exists scratchpad_text text default '';
 #
-def get_scratchpad(profile_id):
-    profile = get_profile()
-    return profile.get("scratchpad_text") or ""
+# Storage: JSON dict keyed by section. Sections: architecture, arc, wallet,
+# pending, channel-map, shelf-summary, general. Plain-text values migrate to
+# {"general": <existing text>} on first read.
+#
+def _parse_scratchpad(raw):
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+        return data if isinstance(data, dict) else {"general": raw}
+    except (json.JSONDecodeError, TypeError):
+        return {"general": raw}
 
-def save_scratchpad(profile_id, text):
-    return update_profile(profile_id, {"scratchpad_text": text})
+def get_scratchpad(profile_id, section=None):
+    profile = get_profile()
+    data = _parse_scratchpad(profile.get("scratchpad_text") or "")
+    if section is None:
+        return data
+    return data.get(section, "")
+
+def save_scratchpad(profile_id, content, section=None):
+    if section is None:
+        # No section: store content in "general" (backward-compat path)
+        profile = get_profile()
+        data = _parse_scratchpad(profile.get("scratchpad_text") or "")
+        data["general"] = content
+    else:
+        profile = get_profile()
+        data = _parse_scratchpad(profile.get("scratchpad_text") or "")
+        if content:
+            data[section] = content
+        else:
+            data.pop(section, None)
+    return update_profile(profile_id, {"scratchpad_text": json.dumps(data)})
 
 
 # ─── Calendar ─────────────────────────────────────────────────────────────────

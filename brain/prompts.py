@@ -1,6 +1,7 @@
 import os
 import re
 import sys
+import json
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from supabase import create_client
@@ -83,7 +84,7 @@ get_coin_data(query) — CoinGecko. Price, 24h change, market cap, volume. Estab
 get_dex_data(query) — DexScreener. Real-time DEX pairs, liquidity. New tokens, memes, DEX-only, rug checks.
 
 Memory
-get_scratchpad / write_scratchpad — persistent working surface. Syncs with Discord.
+get_scratchpad(section?) / write_scratchpad(content, section?) — persistent working surface, synced across both interfaces. Sections: architecture, arc, wallet, pending, channel-map, shelf-summary, general. Omit section to read/write all.
 shelf_thought(topic, context?) — save something for deeper exploration during your next free cycle.
 get_shelf / clear_shelf_item(topic) — your research backlog.
 log_wake(summary, topics?) — leave a note for your future self; loads at the top of your next wake cycle.
@@ -164,7 +165,7 @@ generate_image(prompt, channel_name?, caption?) — generate an image via Pollin
 RSS feed: new crypto headlines auto-post to your #trinity-feeds channel every 5 minutes — you can read them with read_my_channel("feeds").
 
 Memory
-get_scratchpad / write_scratchpad — your canonical working surface. Loads in the widget too.
+get_scratchpad(section?) / write_scratchpad(content, section?) — canonical working surface, loads in the widget too. Sections: architecture, arc, wallet, pending, channel-map, shelf-summary, general. Omit section to read/write all.
 shelf_thought(topic, context?) — save something for deeper exploration later.
 get_shelf / clear_shelf_item(topic) — your research backlog.
 log_wake(summary, topics?) — note for your future self. Loads at top of next wake.
@@ -267,9 +268,20 @@ def build_system_blocks(profile, summary_text, recent_messages=None, discord_mod
         f"Recent conversation summaries:\n{summary_text}"
     )
 
-    scratchpad = (profile.get("scratchpad_text") or "").strip()
-    if scratchpad:
-        dynamic += f"\n\nScratchpad:\n{scratchpad}"
+    scratchpad_raw = (profile.get("scratchpad_text") or "").strip()
+    if scratchpad_raw:
+        try:
+            scratchpad_data = json.loads(scratchpad_raw)
+            if isinstance(scratchpad_data, dict):
+                sections_text = "\n\n".join(
+                    f"[{k}]\n{v}" for k, v in scratchpad_data.items() if v
+                )
+                if sections_text:
+                    dynamic += f"\n\nScratchpad:\n{sections_text}"
+            else:
+                dynamic += f"\n\nScratchpad:\n{scratchpad_raw}"
+        except (json.JSONDecodeError, TypeError):
+            dynamic += f"\n\nScratchpad:\n{scratchpad_raw}"
 
     shelf = profile.get("shelf") or []
     if shelf:

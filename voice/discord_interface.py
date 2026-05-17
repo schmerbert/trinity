@@ -406,15 +406,24 @@ DISCORD_TOOLS = [
     },
     {
         "name": "get_scratchpad",
-        "description": "Read your persistent scratchpad — carries between sessions and across both interfaces.",
-        "input_schema": {"type": "object", "properties": {}, "required": []}
+        "description": "Read your persistent scratchpad. Omit section to get all sections as a dict. Pass a section key to read just that section. Sections: architecture, arc, wallet, pending, channel-map, shelf-summary, general.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "section": {"type": "string", "description": "Specific section to read (optional)"}
+            },
+            "required": []
+        }
     },
     {
         "name": "write_scratchpad",
-        "description": "Update your persistent scratchpad. This is your canonical working surface — it loads in the widget next session.",
+        "description": "Write to your persistent scratchpad. Pass a section to update only that section — other sections are untouched. Omit section to write into 'general'. Sections: architecture, arc, wallet, pending, channel-map, shelf-summary, general.",
         "input_schema": {
             "type": "object",
-            "properties": {"content": {"type": "string"}},
+            "properties": {
+                "content": {"type": "string"},
+                "section": {"type": "string", "description": "Section to update (optional — defaults to 'general')"}
+            },
             "required": ["content"]
         }
     },
@@ -1248,15 +1257,19 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         profile = get_profile()
         if not profile:
             return {"error": "No profile"}
-        return {"content": get_scratchpad(profile["id"])}
+        section = inputs.get("section")
+        result = get_scratchpad(profile["id"], section)
+        return {"section": section, "content": result} if section else {"sections": result}
 
     elif name == "write_scratchpad":
         profile = get_profile()
         if not profile:
             return {"error": "No profile"}
-        save_scratchpad(profile["id"], inputs["content"])
-        log.info(f"Scratchpad updated ({len(inputs['content'])} chars)")
-        return {"status": "saved"}
+        section = inputs.get("section")
+        save_scratchpad(profile["id"], inputs["content"], section)
+        label = f"[{section}]" if section else "[general]"
+        log.info(f"Scratchpad{label} updated ({len(inputs['content'])} chars)")
+        return {"status": "saved", "section": section or "general"}
 
     elif name == "send_thought":
         profile = get_profile()
@@ -1796,6 +1809,8 @@ Radar: {interest_str}{wake_str}
 
     context += """
 Scratchpad audit: scan your scratchpad for stale flags or pending items — anything marked "pending", "down", "needs follow-up". Resolve what you can.
+
+Before closing: use send_thought to queue what's worth continuing next cycle. A cycle that ends without a queued thread starts the next one cold.
 
 Hourly window — roughly 20 minutes."""
 

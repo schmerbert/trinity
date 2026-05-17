@@ -10,6 +10,18 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-17] — Scratchpad named sections
+
+Scratchpad now uses a JSON dict with named sections instead of a flat text field. Sections: `architecture`, `arc`, `wallet`, `pending`, `channel-map`, `shelf-summary`, `general`. Both `get_scratchpad` and `write_scratchpad` accept an optional `section` parameter — reading or writing a single section leaves all others intact. Plain-text scratchpad content migrates automatically to `general` on first read. System prompt renders sections with `[section-name]` headers. Widget panel display matches. Requested by Trinity.
+
+---
+
+## [2026-05-17] — Closing thread pattern
+
+Wake context now includes an explicit instruction to queue a self-thought before closing: "A cycle that ends without a queued thread starts the next one cold." Cycles should end with a thread, not a silence. Proposed by Trinity; approved and implemented. Builds on the existing scratchpad audit instruction.
+
+---
+
 ## [2026-05-17] — Voice tag for TTS control
 
 `<voice>spoken version</voice>` tag is live. When present in a response, TTS reads the tag content instead of the full text. Display always gets everything — the tag is stripped before rendering. Use it when the spoken version should differ from the written one: condensed market data, lists that read awkwardly aloud, anything where display precision and spoken clarity diverge. Requested by Trinity.
