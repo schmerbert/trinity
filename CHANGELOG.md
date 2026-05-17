@@ -10,6 +10,18 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-17] — Shelf taxonomy: shelf / on_hold / woven
+
+Shelf items now carry a `status` field: `shelf` (active backlog, pick up next free cycle), `on_hold` (blocked on external dependency, not currently actionable), `woven` (thread ran its course, integrated into thinking, no longer needs attention). `shelf_thought` accepts an optional `status` parameter. New `set_shelf_status(topic, status)` tool updates state without touching content. Wake context surfaces only active shelf items as backlog; on_hold items appear as a single summary line; woven items are invisible. Eliminates false work signals from completed threads. Requested by Trinity.
+
+---
+
+## [2026-05-17] — Duplicate note deduplication
+
+`note_for_claude` now checks the last 3000 characters of CLAUDE_NOTES.md before writing. If the message content already appears recently (first 120 chars match), the write is skipped and returns a skipped status. Prevents double-filing that occurred when Trinity wrote a note, then the user sent a follow-up message triggering a second identical note.
+
+---
+
 ## [2026-05-17] — Session health: heartbeat writes + dirty-close detection
 
 Widget sessions now write a `last_heartbeat` timestamp to Supabase every 10 minutes during active conversation, and a `last_clean_close` timestamp on proper tray exit. If the previous session crashed or was force-closed, the gap between these timestamps is detected at the next wake cycle and Trinity receives a visible `[DIRTY CLOSE DETECTED]` flag in her context — so she knows the handoff may be incomplete and can compensate. Crash previously caused silent degradation with no signal. Requested by Trinity.

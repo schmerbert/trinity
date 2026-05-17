@@ -343,12 +343,18 @@ class TrinityWorker(QThread):
 
         elif name == "shelf_thought":
             from brain.memory import add_to_shelf
-            add_to_shelf(self.profile_id, inputs["topic"], inputs.get("context", ""))
-            return {"status": "shelved", "topic": inputs["topic"]}
+            status = inputs.get("status", "shelf")
+            add_to_shelf(self.profile_id, inputs["topic"], inputs.get("context", ""), status=status)
+            return {"status": "shelved", "topic": inputs["topic"], "shelf_status": status}
+
+        elif name == "set_shelf_status":
+            from brain.memory import set_shelf_status as _sss
+            _sss(self.profile_id, inputs["topic"], inputs["status"])
+            return {"status": "updated", "topic": inputs["topic"], "shelf_status": inputs["status"]}
 
         elif name == "get_shelf":
             from brain.memory import get_shelf as _get_shelf
-            return _get_shelf(self.profile_id) or []
+            return _get_shelf(self.profile_id, status=inputs.get("status")) or []
 
         elif name == "clear_shelf_item":
             from brain.memory import remove_from_shelf
@@ -420,12 +426,20 @@ class TrinityWorker(QThread):
             try:
                 import datetime as _dt
                 notes_path = Path(__file__).parent.parent / "CLAUDE_NOTES.md"
+                msg = inputs['message'].strip()
+                try:
+                    existing = notes_path.read_text(encoding="utf-8")
+                    if msg[:120] in existing[-3000:]:
+                        log.info(f"Note for Claude skipped — duplicate detected")
+                        return {"status": "skipped", "reason": "duplicate of recent note"}
+                except Exception:
+                    pass
                 ts  = _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
                 tag = inputs.get("tag", "observation").upper()
-                entry = f"## [{tag}] {ts}\n{inputs['message']}\n\n---\n\n"
+                entry = f"## [{tag}] {ts}\n{msg}\n\n---\n\n"
                 with open(notes_path, "a", encoding="utf-8") as f:
                     f.write(entry)
-                log.info(f"Note for Claude [{tag}]: {inputs['message'][:60]}")
+                log.info(f"Note for Claude [{tag}]: {msg[:60]}")
                 return {"status": "noted"}
             except Exception as e:
                 return {"error": str(e)}

@@ -614,16 +614,27 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         profile = get_profile()
         if not profile:
             return {"error": "No profile"}
-        add_to_shelf(profile["id"], inputs["topic"], inputs.get("context", ""))
-        log.info(f"→ shelf: {inputs['topic'][:60]}")
-        return {"status": "shelved", "topic": inputs["topic"]}
+        status = inputs.get("status", "shelf")
+        add_to_shelf(profile["id"], inputs["topic"], inputs.get("context", ""), status=status)
+        log.info(f"→ shelf [{status}]: {inputs['topic'][:60]}")
+        return {"status": "shelved", "topic": inputs["topic"], "shelf_status": status}
+
+    elif name == "set_shelf_status":
+        profile = get_profile()
+        if not profile:
+            return {"error": "No profile"}
+        from brain.memory import set_shelf_status as _sss
+        _sss(profile["id"], inputs["topic"], inputs["status"])
+        log.info(f"shelf status → {inputs['status']}: {inputs['topic'][:60]}")
+        return {"status": "updated", "topic": inputs["topic"], "shelf_status": inputs["status"]}
 
     elif name == "get_shelf":
         profile = get_profile()
         if not profile:
             return {"error": "No profile"}
-        shelf = get_shelf(profile["id"]) or []
-        log.info(f"shelf: {len(shelf)} item(s)")
+        status_filter = inputs.get("status")
+        shelf = get_shelf(profile["id"], status=status_filter) or []
+        log.info(f"shelf: {len(shelf)} item(s)" + (f" [{status_filter}]" if status_filter else ""))
         return shelf
 
     elif name == "clear_shelf_item":
@@ -779,12 +790,21 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         try:
             from pathlib import Path as _Path
             notes_path = _Path(__file__).parent.parent / "CLAUDE_NOTES.md"
+            msg = inputs['message'].strip()
+            # Dedup: skip if this message already appears in the last 3000 chars
+            try:
+                existing = notes_path.read_text(encoding="utf-8")
+                if msg[:120] in existing[-3000:]:
+                    log.info(f"Note for Claude skipped — duplicate detected")
+                    return {"status": "skipped", "reason": "duplicate of recent note"}
+            except Exception:
+                pass
             ts  = datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
             tag = inputs.get("tag", "observation").upper()
-            entry = f"## [{tag}] {ts}\n{inputs['message']}\n\n---\n\n"
+            entry = f"## [{tag}] {ts}\n{msg}\n\n---\n\n"
             with open(notes_path, "a", encoding="utf-8") as f:
                 f.write(entry)
-            log.info(f"Note for Claude [{tag}]: {inputs['message'][:60]}")
+            log.info(f"Note for Claude [{tag}]: {msg[:60]}")
             return {"status": "noted"}
         except Exception as e:
             return {"error": str(e)}
@@ -1213,9 +1233,12 @@ async def autonomous_loop():
         log.info(f"Autonomous loop skipped — API busy ({now_str}) | next: {_next_wake_str()}")
         return
 
-    interests    = profile.get("interests") or []
-    shelf        = get_shelf(profile["id"])
-    shelf_str    = "\n".join(f"- {s['topic']}: {s.get('context','')}" for s in shelf) if shelf else "nothing shelved"
+    interests      = profile.get("interests") or []
+    shelf_active   = get_shelf(profile["id"], status="shelf")
+    shelf_on_hold  = get_shelf(profile["id"], status="on_hold")
+    shelf_str = "\n".join(f"- {s['topic']}: {s.get('context','')}" for s in shelf_active) if shelf_active else "nothing active"
+    if shelf_on_hold:
+        shelf_str += "\nOn hold (external dependency): " + ", ".join(s['topic'] for s in shelf_on_hold)
     interest_str = ", ".join(i["topic"] for i in interests[:8]) if interests else "none yet"
 
     wake_history = get_wake_history(profile["id"], limit=3)
@@ -1281,7 +1304,7 @@ Hourly window — roughly 20 minutes."""
     summaries     = get_recent_summaries(profile["id"])
     system_blocks = build_system_blocks(profile, format_summaries(summaries), [], discord_mode=True)
 
-    log.info(f"── autonomous cycle ── {now_str} | shelf: {len(shelf)} | last seen: {last_seen_str}")
+    log.info(f"── autonomous cycle ── {now_str} | shelf: {len(shelf_active)} active / {len(shelf_on_hold)} on hold | last seen: {last_seen_str}")
     try:
         await _call_trinity(system_blocks, [{"role": "user", "content": api_message}], profile["id"], retry=False, background=True)
         log.info(f"── cycle complete ──")

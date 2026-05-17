@@ -146,15 +146,29 @@ def process_feedback(profile_id, topic, feedback):
 #
 # alter table profiles add column if not exists shelf jsonb default '[]';
 #
-def get_shelf(profile_id):
+def get_shelf(profile_id, status=None):
+    """Return shelf items. status filter: 'shelf' | 'on_hold' | 'woven' | None (all).
+    Items without a status field are treated as 'shelf' (backward-compat)."""
     profile = get_profile()
-    return profile.get("shelf") or []
+    items = profile.get("shelf") or []
+    if status is not None:
+        items = [s for s in items if (s.get("status") or "shelf") == status]
+    return items
 
-def add_to_shelf(profile_id, topic, context=""):
+def add_to_shelf(profile_id, topic, context="", status="shelf"):
     from datetime import datetime
     shelf = get_shelf(profile_id)
     shelf = [s for s in shelf if s.get("topic", "").lower() != topic.lower()]
-    shelf.append({"topic": topic, "context": context, "added_at": datetime.utcnow().isoformat()})
+    shelf.append({"topic": topic, "context": context, "status": status, "added_at": datetime.utcnow().isoformat()})
+    return update_profile(profile_id, {"shelf": shelf})
+
+def set_shelf_status(profile_id, topic, status):
+    """Update the status of an existing shelf item: 'shelf' | 'on_hold' | 'woven'."""
+    shelf = get_shelf(profile_id)
+    for item in shelf:
+        if item.get("topic", "").lower() == topic.lower():
+            item["status"] = status
+            break
     return update_profile(profile_id, {"shelf": shelf})
 
 def remove_from_shelf(profile_id, topic):

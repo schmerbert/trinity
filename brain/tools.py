@@ -367,38 +367,61 @@ _REGISTRY = [
     },
     {
         "name": "shelf_thought",
-        "description": "Save a topic for deeper exploration later. Use when something is interesting but not urgent — pick it up next free time session.",
+        "description": "Save a topic for deeper exploration later. Status: 'shelf' (active backlog, pick up next free cycle), 'on_hold' (blocked on external dependency), 'woven' (complete — integrated into thinking, no action needed). Default is 'shelf'.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "topic":   {"type": "string"},
-                "context": {"type": "string", "description": "Why it's interesting, what you want to explore"}
+                "context": {"type": "string", "description": "Why it's interesting, what you want to explore"},
+                "status":  {"type": "string", "enum": ["shelf", "on_hold", "woven"], "description": "shelf (active), on_hold (blocked), woven (complete/integrated)"}
             },
             "required": ["topic"]
         },
-        "capability":  "shelf_thought(topic, context?) — save something for deeper exploration during your next free cycle.",
+        "capability":  "shelf_thought(topic, context?, status?) — save something for exploration. status: shelf (active) | on_hold (blocked) | woven (complete/integrated).",
+        "category":    "memory",
+        "interfaces":  {"discord", "widget"},
+        "background":  True,
+    },
+    {
+        "name": "set_shelf_status",
+        "description": "Update the status of an existing shelf item without changing its content. Use to move threads between states: shelf (active backlog) → on_hold (blocked on external dependency) → woven (complete, integrated into thinking, no longer needs attention).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "topic":  {"type": "string", "description": "The shelf item to update"},
+                "status": {"type": "string", "enum": ["shelf", "on_hold", "woven"], "description": "shelf (active), on_hold (blocked), woven (complete/integrated)"}
+            },
+            "required": ["topic", "status"]
+        },
+        "capability":  "set_shelf_status(topic, status) — move a shelf item between states: shelf (active) | on_hold (blocked) | woven (complete, integrated, no longer needs attention).",
         "category":    "memory",
         "interfaces":  {"discord", "widget"},
         "background":  True,
     },
     {
         "name": "get_shelf",
-        "description": "Retrieve topics you've shelved for future exploration.",
-        "input_schema": {"type": "object", "properties": {}, "required": []},
-        "capability":  "get_shelf() — retrieve your research backlog.",
+        "description": "Retrieve your shelf. Returns all items by default. Filter by status: 'shelf' (active backlog only), 'on_hold' (blocked items), 'woven' (completed/integrated threads).",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "status": {"type": "string", "enum": ["shelf", "on_hold", "woven"], "description": "Filter by status (omit for all items)"}
+            },
+            "required": []
+        },
+        "capability":  "get_shelf(status?) — retrieve your shelf. Filter: shelf (active) | on_hold | woven. Omit for all.",
         "category":    "memory",
         "interfaces":  {"discord", "widget"},
         "background":  True,
     },
     {
         "name": "clear_shelf_item",
-        "description": "Remove a topic from the shelf once explored.",
+        "description": "Remove a topic from the shelf entirely.",
         "input_schema": {
             "type": "object",
             "properties": {"topic": {"type": "string"}},
             "required": ["topic"]
         },
-        "capability":  "clear_shelf_item(topic) — remove a topic from the shelf once explored.",
+        "capability":  "clear_shelf_item(topic) — remove a topic from the shelf entirely.",
         "category":    "memory",
         "interfaces":  {"discord", "widget"},
         "background":  True,
