@@ -203,7 +203,7 @@ def build_system_blocks(profile, summary_text, recent_messages=None, discord_mod
         pass
 
     return [
-        {"type": "text", "text": "\n\n".join(static_parts), "cache_control": {"type": "ephemeral"}},
+        {"type": "text", "text": "\n\n".join(static_parts), "cache_control": {"type": "ephemeral", "ttl": "1h"}},
         {"type": "text", "text": dynamic}
     ]
 
