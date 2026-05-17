@@ -69,7 +69,8 @@ ai_client = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
 
 _conversations: dict[int, list]  = {}
 _watched_channels: set[int]      = set()
-_api_lock = asyncio.Semaphore(1)
+_api_lock = asyncio.Semaphore(1)  # foreground (user messages) only
+_bg_lock  = asyncio.Semaphore(1)  # background cycles — separate so they don't block users
 _last_eyes_check: datetime       = datetime.utcnow()
 _feed_seen_hashes:  set          = set()  # populated on_ready, prevents backlog flood
 
@@ -1499,7 +1500,8 @@ async def before_heartbeat():
 # ─── Agentic response loop ────────────────────────────────────────────────────
 
 async def _call_trinity(system_blocks: list, messages: list, profile_id: str, retry: bool = True, background: bool = False) -> str:
-    async with _api_lock:
+    lock = _bg_lock if background else _api_lock
+    async with lock:
         return await _call_trinity_inner(system_blocks, messages, profile_id, retry=retry, background=background)
 
 
@@ -1558,6 +1560,11 @@ async def _call_trinity_inner(system_blocks: list, messages: list, profile_id: s
             if elapsed >= _BG_WINDOW:
                 log.info(f"Background cycle window reached ({elapsed/60:.1f}min, {tool_count} tool calls)")
                 return ""
+        # Yield immediately if user sends a message mid-cycle
+        if background and _api_lock.locked():
+            elapsed = (loop.time() - cycle_start) if cycle_start else 0
+            log.info(f"Background cycle yielding — user message incoming ({elapsed/60:.1f}min, {tool_count} tool calls)")
+            return ""
         if iters >= max_iters:
             if background:
                 log.warning(f"Background cycle hit safety cap ({max_iters} iterations)")
