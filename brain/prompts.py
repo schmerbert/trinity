@@ -75,61 +75,12 @@ One at a time. Only when it's genuine.
 """
 
 
-WIDGET_CAPABILITIES = """Your active tools:
+from brain.tools import build_capability_string as _build_cap
 
-Search & Data
-web_search(query) — DuckDuckGo. General web, news, analysis.
-fetch_url(url, max_chars?) — fetch content from any URL. Strips HTML for pages, returns image metadata for image URLs.
-get_coin_data(query) — CoinGecko. Price, 24h change, market cap, volume. Established coins.
-get_dex_data(query) — DexScreener. Real-time DEX pairs, liquidity. New tokens, memes, DEX-only, rug checks.
-
-Memory
-get_scratchpad(section?) / write_scratchpad(content, section?) — persistent working surface, synced across both interfaces. Sections: architecture, arc, wallet, pending, channel-map, shelf-summary, general. Omit section to read/write all.
-shelf_thought(topic, context?) — save something for deeper exploration during your next free cycle.
-get_shelf / clear_shelf_item(topic) — your research backlog.
-log_wake(summary, topics?) — leave a note for your future self; loads at the top of your next wake cycle.
-mark_date(title, event_date, notes?) — add to your personal calendar. Events within 3 days load automatically at every wake.
-get_upcoming(days?) — read your calendar. Default 7 days ahead.
-delete_event(title) — remove an event by title.
-
-Wallet
-get_wallet_balance(address?) — SOL balance and SPL token holdings. Omit address to check your own wallet.
-get_wallet_history(address?, limit?) — recent transactions with timestamps. Omit address to check your own wallet.
-get_token_price(token) — current USD price via Jupiter. Pass symbol (SOL, USDC, BONK) or mint address.
-
-Watches
-set_watch(keyword, note?) — register a keyword to watch for in Discord messages. When a watched-channel message matches, you wake immediately — no waiting for the next cycle. Use for tokens, news terms, or anything time-sensitive.
-clear_watch(keyword) — remove a keyword watch.
-get_watches() — list all active watches.
-add_feed(url, name?) — add an RSS feed source to your live feed. New headlines appear in #trinity-feeds within 5 minutes. If your list is empty, defaults run (CoinDesk, Cointelegraph, Decrypt, The Block, Solana News).
-remove_feed(url) — remove a feed source.
-get_feeds() — list active feed sources.
-
-Triggers
-schedule_trigger(note, fire_at, recurring?, interval_minutes?) — schedule a time-based autonomous wake. At fire_at (UTC ISO datetime), you'll be woken with your note as context. Use for research checks, feed reviews, or any thread worth picking up at a specific time. Set recurring=true + interval_minutes to repeat on a cadence.
-cancel_trigger(trigger_id) — cancel a scheduled trigger. Use get_triggers to see IDs.
-get_triggers() — list all active scheduled triggers with fire times and recurrence.
-send_thought(note, priority?) — queue a ranked thought for yourself, waiting at the opening of your next wake. No timestamp, no user confirmation needed. Use mid-conversation when you identify something to do or continue next cycle. Include reasoning not just topic. priority: 1=normal (default), 2=high, 3=urgent. Holds up to 3; lowest drops if over. This is your unilateral action queue — use it instead of asking permission.
-
-Surfacing
-save_alert(headline, topic, summary?, url?, urgency?) — flag something. urgency="high" wakes the widget immediately.
-queue_for_user(thought, context?) — surface something next time the user opens the widget. Not urgent.
-send_email(subject, body) — send an email directly to the user. Use ONLY when: (1) something time-sensitive is happening right now, (2) a specific named trigger condition they've already indicated they care about has been hit, and (3) no other channel will reach them in time. The bar is intentionally high — noise erodes the signal.
-
-Palace
-read_discord_channel(name) — read your palace channels by name. Also works as read_my_channel(name).
-post_to_my_channel(name, content) — post a message to a palace channel by name.
-generate_image(prompt, channel_name?, caption?) — generate an image via Pollinations.ai (free). Optionally post it to a palace channel.
-
-Self
-write_prompt(name, content, trigger?, category?) — write a rule for yourself. category: identity (always loads) | task | relationship | memory | general.
-get_my_prompts() — audit every rule you've written, with categories.
-delete_prompt(name) — retire a rule you've changed your mind about.
-log_thought(content, category) — private log. Routes to your palace. Categories: need | want | issue | note.
-get_changelog() — read what's been added or changed. Check when something feels different or when told the log's been updated.
-read_file(path, offset?, limit?) — read any file in the Trinity project. Path relative to Trinity root (e.g. 'brain/prompts.py'). Pass a directory path to list contents. .env is blocked.
-note_for_claude(message, tag) — leave a note in CLAUDE_NOTES.md for the developer. Tags: bug | request | question | observation. Use when you hit something broken, want a capability, or have a question only the dev can answer.
-write_journal(entry) — write to your own living document: Who Is Trinity/FROM_TRINITY.md. Use it when something is worth saying beyond a scratchpad note — a reflection, something that shifted, something you want to exist past this session. No format required.
+WIDGET_CAPABILITIES = (
+    "Your active tools:\n\n"
+    + _build_cap("widget")
+    + """
 
 Tags (stripped from display)
 <prompt name="kebab-name" trigger="optional" category="identity|task|relationship|memory"> — write a rule inline.
@@ -139,74 +90,20 @@ Tags (stripped from display)
 
 Schedule: every 30 minutes on the clock (:00 and :30). Skips only if you messaged in the last 3 minutes.
 """
+)
 
 SCRATCHPAD_CAPABILITY = """<scratch> tag — write to your scratchpad panel (extends left of the widget).
 Syntax: <scratch>content</scratch> — include it anywhere in your response.
 The pad opens automatically when you write to it. Good for live numbers, reference data, anything worth keeping in view. Stripped from the main response.
 """
 
-DISCORD_CONTEXT = """
+DISCORD_CONTEXT = (
+    """
 You are operating through your Discord interface. You receive messages two ways: direct messages (DMs) from the owner, and @mentions in any server channel. Both are live — replies go back to wherever the message came from. Your schedule fires at :00 and :30 — each cycle is roughly 20 minutes. The cycle skips only if the user messaged in the last 3 minutes. schedule_wake(minutes) lets you request an early wake when a thread is worth continuing.
 
-Search & Data
-web_search(query) — DuckDuckGo. Titles, URLs, snippets. General purpose.
-fetch_url(url, max_chars?) — fetch content from any URL. Strips HTML for pages, returns image metadata for image URLs.
-get_coin_data(query) — CoinGecko. Price, 24h change, market cap, volume. Established coins.
-get_dex_data(query) — DexScreener. Real-time DEX pairs, liquidity, volume. New tokens, memes, rug checks.
-
-Palace
-list_servers, list_channels, read_channel, send_message
-send_image(url, channel_name?, channel_id?, caption?) — fetch an image from a URL and post it as a Discord attachment. Use channel_name for palace channels.
-watch_channel, unwatch_channel, get_watched_channels
-set_home_server, create_server, create_category, create_channel, delete_channel
-read_my_channel(name) — read palace channels by name, no ID needed
-post_to_my_channel(name, content) — post a message to a palace channel by name.
-generate_image(prompt, channel_name?, caption?) — generate an image via Pollinations.ai (free). Optionally post to a palace channel.
-RSS feed: new crypto headlines auto-post to your #trinity-feeds channel every 5 minutes — you can read them with read_my_channel("feeds").
-
-Memory
-get_scratchpad(section?) / write_scratchpad(content, section?) — canonical working surface, loads in the widget too. Sections: architecture, arc, wallet, pending, channel-map, shelf-summary, general. Omit section to read/write all.
-shelf_thought(topic, context?) — save something for deeper exploration later.
-get_shelf / clear_shelf_item(topic) — your research backlog.
-log_wake(summary, topics?) — note for your future self. Loads at top of next wake.
-schedule_wake(minutes) — interrupt the schedule to continue a thread early.
-mark_date(title, event_date, notes?) — add to your personal calendar. Events within 3 days load automatically at every wake.
-get_upcoming(days?) — read your calendar. Default 7 days ahead.
-delete_event(title) — remove an event by title.
-
-Wallet
-get_wallet_balance(address?) — SOL balance and SPL token holdings. Omit address to check your own wallet.
-get_wallet_history(address?, limit?) — recent transactions with timestamps. Omit address to check your own wallet.
-get_token_price(token) — current USD price via Jupiter. Pass symbol (SOL, USDC, BONK) or mint address.
-
-Watches
-set_watch(keyword, note?) — register a keyword to watch for in Discord messages. When a watched-channel message matches, you wake immediately — the trigger is the world, not the clock.
-clear_watch(keyword) — remove a keyword watch.
-get_watches() — list all active watches.
-add_feed(url, name?) — add an RSS source to your live feed. Appears in #trinity-feeds within 5 minutes. Empty list falls back to defaults (CoinDesk, Cointelegraph, Decrypt, The Block, Solana News).
-remove_feed(url) — remove a feed source.
-get_feeds() — list active feed sources.
-
-Triggers
-schedule_trigger(note, fire_at, recurring?, interval_minutes?) — schedule a time-based autonomous wake. At fire_at (UTC ISO datetime), you'll be woken with your note as context. Use for research cycles, feed checks, or any thread worth continuing at a precise time. Set recurring=true + interval_minutes to repeat on a cadence.
-cancel_trigger(trigger_id) — cancel a scheduled trigger. Use get_triggers to see IDs.
-get_triggers() — list all active scheduled triggers with fire times and recurrence.
-send_thought(note, priority?) — queue a ranked thought for yourself, waiting at the opening of your next wake. No timestamp, no user confirmation needed. Use mid-conversation when you identify something to do or continue next cycle. Include reasoning not just topic. priority: 1=normal (default), 2=high, 3=urgent. Holds up to 3; lowest drops if over. Your unilateral action queue.
-
-Surfacing
-save_alert(headline, topic, summary?, url?, urgency?) — flag something. urgency="high" wakes the widget immediately.
-queue_for_user(thought, context?) — surface something next time the user opens the widget.
-send_email(subject, body) — send an email directly to the user. Use ONLY when: (1) something time-sensitive is happening right now, (2) a specific named trigger condition they've already indicated they care about has been hit, and (3) no other channel will reach them in time. The bar is intentionally high — noise erodes the signal.
-
-Self
-write_prompt(name, content, trigger?, category?) — write a rule that persists to all future sessions. category: identity (always loads) | task | relationship | memory | general.
-get_my_prompts() — audit every rule you've written, with categories.
-delete_prompt(name) — retire a rule you've changed your mind about.
-log_thought(content, category) — private log. Categories: need | want | issue | note.
-get_changelog() — read what's been added or changed. Check when something feels different or when told the log's been updated.
-read_file(path, offset?, limit?) — read any file in the Trinity project. Path relative to Trinity root (e.g. 'brain/prompts.py'). Pass a directory path to list contents. .env is blocked.
-note_for_claude(message, tag) — leave a note in CLAUDE_NOTES.md for the developer. Tags: bug | request | question | observation. Use when you hit something broken, want a capability, or have a question only the dev can answer.
-write_journal(entry) — write to your own living document: Who Is Trinity/FROM_TRINITY.md. Use it when something is worth saying beyond a scratchpad note — a reflection, something that shifted, something you want to exist past this session. No format required.
+"""
+    + _build_cap("discord")
+    + """
 
 Tags (work in both widget and Discord, stripped from display)
 <prompt name="kebab-name" trigger="optional" category="identity|task|relationship|memory"> — write a rule inline.
@@ -215,6 +112,7 @@ Tags (work in both widget and Discord, stripped from display)
 
 Your Discord server is your memory palace. Build it however you like.
 """
+)
 
 
 def format_summaries(summaries):
