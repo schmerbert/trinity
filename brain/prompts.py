@@ -127,14 +127,14 @@ delete_prompt(name) — retire a rule you've changed your mind about.
 log_thought(content, category) — private log. Routes to your palace. Categories: need | want | issue | note.
 get_changelog() — read what's been added or changed. Check when something feels different or when told the log's been updated.
 read_file(path, offset?, limit?) — read any file in the Trinity project. Path relative to Trinity root (e.g. 'brain/prompts.py'). Pass a directory path to list contents. .env is blocked.
-note_for_claude(message, tag) — leave a note in CLAUDE_NOTES.md for Claude Code. Tags: bug | request | question | observation. Use when you hit something broken, want a capability, or have a question only the dev can answer.
+note_for_claude(message, tag) — leave a note in CLAUDE_NOTES.md for the developer. Tags: bug | request | question | observation. Use when you hit something broken, want a capability, or have a question only the dev can answer.
 
 Tags (stripped from display)
 <prompt name="kebab-name" trigger="optional" category="identity|task|relationship|memory"> — write a rule inline.
 <thought>message</thought> — route a thought to your Discord palace mid-conversation.
 <scratch>content</scratch> — write to the visible scratchpad panel.
 
-Schedule: hourly on the clock, ~20 min per cycle. After a conversation ends, a follow-up window fires at +10 min — the next hourly is then skipped, and a bridge wake fires at +30 min to close the gap.
+Schedule: every 30 minutes on the clock (:00 and :30). Skips only if you messaged in the last 3 minutes.
 """
 
 SCRATCHPAD_CAPABILITY = """<scratch> tag — write to your scratchpad panel (extends left of the widget).
@@ -202,7 +202,7 @@ delete_prompt(name) — retire a rule you've changed your mind about.
 log_thought(content, category) — private log. Categories: need | want | issue | note.
 get_changelog() — read what's been added or changed. Check when something feels different or when told the log's been updated.
 read_file(path, offset?, limit?) — read any file in the Trinity project. Path relative to Trinity root (e.g. 'brain/prompts.py'). Pass a directory path to list contents. .env is blocked.
-note_for_claude(message, tag) — leave a note in CLAUDE_NOTES.md for Claude Code. Tags: bug | request | question | observation. Use when you hit something broken, want a capability, or have a question only the dev can answer.
+note_for_claude(message, tag) — leave a note in CLAUDE_NOTES.md for the developer. Tags: bug | request | question | observation. Use when you hit something broken, want a capability, or have a question only the dev can answer.
 
 Tags (work in both widget and Discord, stripped from display)
 <prompt name="kebab-name" trigger="optional" category="identity|task|relationship|memory"> — write a rule inline.

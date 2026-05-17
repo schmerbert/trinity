@@ -413,7 +413,7 @@ WIDGET_TOOLS = [
     },
     {
         "name": "note_for_claude",
-        "description": "Leave a note for Claude Code — bugs you've hit, things you want changed, questions about how you work, design feedback. Claude Code checks CLAUDE_NOTES.md at the start of sessions. Use this when something is worth a dev pass but you can't fix it yourself.",
+        "description": "Leave a note for the developer — bugs you've hit, things you want changed, questions about how you work, design feedback. It's read at the start of every dev session. Use this when something is worth a dev pass but you can't fix it yourself.",
         "input_schema": {
             "type": "object",
             "properties": {

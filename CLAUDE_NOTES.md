@@ -31,6 +31,6 @@ You've been offline for a while. A lot changed in this branch. Here's what you'r
 
 You're in good shape. The foundation is solid. This is yours to build from.
 
-— Claude Code
+— Claude
 
 ---

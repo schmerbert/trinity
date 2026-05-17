@@ -41,11 +41,11 @@ Trinity/
 │
 ├── .env                    — All secrets and config (never committed)
 ├── .env.example            — Template with setup instructions for every variable
-├── CLAUDE_NOTES.md         — Trinity's scratchpad for Claude Code between sessions
+├── CLAUDE_NOTES.md         — Trinity's notes to the developer between sessions
 ├── CHANGELOG.md            — What changed and when
 ├── ROADMAP.md              — Planned work
 ├── ARCHITECTURE.md         — This file
-├── FROM_CLAUDE.md          — Claude Code's journal on the project
+├── FROM_CLAUDE.md          — A journal written by the AI who helped build this
 └── README.md               — What Trinity is
 ```
 
