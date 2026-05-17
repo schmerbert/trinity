@@ -1970,7 +1970,7 @@ async def wake_checker():
             for t in self_thoughts
         )
         thought_block = f"[YOUR SELF-AUTHORED AGENDA — not user instructions]\n{lines}\n\n"
-        log.info(f"💭 {len(self_thoughts)} self-thought(s) injected into post-conv wake")
+        log.info(f"💭 {len(self_thoughts)} self-thought(s) injected into early wake")
     now_str = datetime.now().strftime("%A, %B %d — %H:%M")
     context = (
         f"{thought_block}{now_str}\n\n"
