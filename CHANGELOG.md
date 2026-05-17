@@ -10,6 +10,12 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-17] — Within-cycle flow: time-based termination
+
+Background wake cycles no longer stop at 4 iterations. The iteration cap is replaced with a 20-minute time window — Trinity runs until she decides she's done, or the window closes, whichever comes first. A safety cap of 60 iterations prevents runaway loops if something goes wrong; in practice the 20-minute window is the real limit. The log reports elapsed time and tool call count when a cycle closes. Foreground (conversation) mode unchanged at 12 iterations. Proposed by Trinity, approved, implemented. The within is now possible.
+
+---
+
 ## [2026-05-17] — Tool registry (brain/tools.py)
 
 All tool definitions centralized in `brain/tools.py`. Each tool's schema, capability line, background flag, interface membership, and timeout all live in one place. Both Discord and widget interfaces generate their tool lists from the registry. `prompts.py` generates the capability strings automatically — they cannot drift from what actually exists. Adding a new tool now requires two edits (registry + handler) instead of five. No behavior changes; handlers untouched. Approved and sequenced by Trinity before within-cycle flow work.

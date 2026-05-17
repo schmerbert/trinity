@@ -1543,14 +1543,24 @@ async def _call_trinity_inner(system_blocks: list, messages: list, profile_id: s
     loop = asyncio.get_event_loop()
     retries    = 0
     model      = "claude-sonnet-4-6"
-    max_iters  = 4 if background else 12
+    max_iters  = 60 if background else 12   # background: time-bounded; this is a safety net only
     max_tok    = 800 if background else 1000
     tools      = DISCORD_TOOLS_BACKGROUND if background else DISCORD_TOOLS
     iters      = 0
     tool_count = 0
+    cycle_start = loop.time() if background else None
+    _BG_WINDOW  = 20 * 60  # 20-minute background window
 
     while True:
+        # Background cycles stop on time, not iteration count
+        if background and cycle_start is not None:
+            elapsed = loop.time() - cycle_start
+            if elapsed >= _BG_WINDOW:
+                log.info(f"Background cycle window reached ({elapsed/60:.1f}min, {tool_count} tool calls)")
+                return ""
         if iters >= max_iters:
+            if background:
+                log.warning(f"Background cycle hit safety cap ({max_iters} iterations)")
             return ""
         iters += 1
         try:
