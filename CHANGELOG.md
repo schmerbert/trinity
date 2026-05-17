@@ -10,6 +10,12 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-16] — Wake rhythm simplified
+
+Post-conversation wake machinery removed. Wake cycle is now a clean clock: fires at `:00` and `:30`, skips only if the user messaged in the last 3 minutes. No double fires, no skip flags, no bridge wakes. `wake_checker` remains for Trinity-requested early wakes. Heartbeat logs `◎ alive | next wake: HH:MM UTC` every 10 minutes.
+
+---
+
 ## [2026-05-16] — Branch: claude-code-start
 
 ### Scheduled Triggers

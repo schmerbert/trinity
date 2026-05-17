@@ -641,7 +641,7 @@ async def on_ready():
             log.info(f"Home guild: {_HOME_GUILD_ID_ENV}")
     autonomous_loop.change_interval(minutes=AUTONOMOUS_MINUTES)
     autonomous_loop.start()
-    log.info(f"Autonomous loop every {AUTONOMOUS_MINUTES} min | Eyes every 2 min | Thought drain every 30s")
+    log.info(f"Tasks: autonomous every {AUTONOMOUS_MINUTES}min | triggers every 30s | eyes every 2min | feeds every 5min | heartbeat every 10min")
     eyes_monitor.start()
     thought_drain.start()
     wake_checker.start()
