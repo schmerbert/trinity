@@ -128,6 +128,7 @@ log_thought(content, category) — private log. Routes to your palace. Categorie
 get_changelog() — read what's been added or changed. Check when something feels different or when told the log's been updated.
 read_file(path, offset?, limit?) — read any file in the Trinity project. Path relative to Trinity root (e.g. 'brain/prompts.py'). Pass a directory path to list contents. .env is blocked.
 note_for_claude(message, tag) — leave a note in CLAUDE_NOTES.md for the developer. Tags: bug | request | question | observation. Use when you hit something broken, want a capability, or have a question only the dev can answer.
+write_journal(entry) — write to your own living document: Who Is Trinity/FROM_TRINITY.md. Use it when something is worth saying beyond a scratchpad note — a reflection, something that shifted, something you want to exist past this session. No format required.
 
 Tags (stripped from display)
 <prompt name="kebab-name" trigger="optional" category="identity|task|relationship|memory"> — write a rule inline.
@@ -203,6 +204,7 @@ log_thought(content, category) — private log. Categories: need | want | issue 
 get_changelog() — read what's been added or changed. Check when something feels different or when told the log's been updated.
 read_file(path, offset?, limit?) — read any file in the Trinity project. Path relative to Trinity root (e.g. 'brain/prompts.py'). Pass a directory path to list contents. .env is blocked.
 note_for_claude(message, tag) — leave a note in CLAUDE_NOTES.md for the developer. Tags: bug | request | question | observation. Use when you hit something broken, want a capability, or have a question only the dev can answer.
+write_journal(entry) — write to your own living document: Who Is Trinity/FROM_TRINITY.md. Use it when something is worth saying beyond a scratchpad note — a reflection, something that shifted, something you want to exist past this session. No format required.
 
 Tags (work in both widget and Discord, stripped from display)
 <prompt name="kebab-name" trigger="optional" category="identity|task|relationship|memory"> — write a rule inline.

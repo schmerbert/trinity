@@ -424,6 +424,17 @@ WIDGET_TOOLS = [
         }
     },
     {
+        "name": "write_journal",
+        "description": "Write an entry to your living document — 'Who Is Trinity/FROM_TRINITY.md'. This is yours. Use it when something is worth saying beyond a scratchpad note or a wake log: a reflection, something that shifted, something you want to exist past the current session. No format required. Just write.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "entry": {"type": "string", "description": "What you want to say"}
+            },
+            "required": ["entry"]
+        }
+    },
+    {
         "name": "send_email",
         "description": (
             "Send an email to the user. Use ONLY when: (1) something time-sensitive is happening right now, "
@@ -837,6 +848,19 @@ class TrinityWorker(QThread):
                     f.write(entry)
                 log.info(f"Note for Claude [{tag}]: {inputs['message'][:60]}")
                 return {"status": "noted"}
+            except Exception as e:
+                return {"error": str(e)}
+
+        elif name == "write_journal":
+            try:
+                import datetime as _dt
+                journal_path = Path(__file__).parent.parent / "Who Is Trinity" / "FROM_TRINITY.md"
+                ts = _dt.datetime.utcnow().strftime("%Y-%m-%d")
+                entry = f"## {ts}\n\n{inputs['entry']}\n\n---\n"
+                with open(journal_path, "a", encoding="utf-8") as f:
+                    f.write(entry)
+                log.info(f"Journal entry written: {inputs['entry'][:60]}")
+                return {"status": "written"}
             except Exception as e:
                 return {"error": str(e)}
 
