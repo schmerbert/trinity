@@ -10,6 +10,12 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-17] — Tool registry (brain/tools.py)
+
+All tool definitions centralized in `brain/tools.py`. Each tool's schema, capability line, background flag, interface membership, and timeout all live in one place. Both Discord and widget interfaces generate their tool lists from the registry. `prompts.py` generates the capability strings automatically — they cannot drift from what actually exists. Adding a new tool now requires two edits (registry + handler) instead of five. No behavior changes; handlers untouched. Approved and sequenced by Trinity before within-cycle flow work.
+
+---
+
 ## [2026-05-17] — Scratchpad named sections
 
 Scratchpad now uses a JSON dict with named sections instead of a flat text field. Sections: `architecture`, `arc`, `wallet`, `pending`, `channel-map`, `shelf-summary`, `general`. Both `get_scratchpad` and `write_scratchpad` accept an optional `section` parameter — reading or writing a single section leaves all others intact. Plain-text scratchpad content migrates automatically to `general` on first read. System prompt renders sections with `[section-name]` headers. Widget panel display matches. Requested by Trinity.
