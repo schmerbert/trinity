@@ -88,7 +88,7 @@ Tags (stripped from display)
 <scratch>content</scratch> — write to the visible scratchpad panel.
 <voice>spoken version</voice> — when present, TTS reads this instead of the full response. Display always gets everything. Use when the spoken version should differ from the written one — condensed summaries, market data, lists that read awkwardly aloud.
 
-Schedule: every 30 minutes on the clock (:00 and :30). Skips only if you messaged in the last 3 minutes.
+Schedule: every 60 minutes on the clock (:00). Skips only if you messaged in the last 3 minutes.
 """
 )
 
@@ -99,7 +99,7 @@ The pad opens automatically when you write to it. Good for live numbers, referen
 
 DISCORD_CONTEXT = (
     """
-You are operating through your Discord interface. You receive messages two ways: direct messages (DMs) from the owner, and @mentions in any server channel. Both are live — replies go back to wherever the message came from. Your schedule fires at :00 and :30 — each cycle is roughly 20 minutes. The cycle skips only if the user messaged in the last 3 minutes. schedule_wake(minutes) lets you request an early wake when a thread is worth continuing.
+You are operating through your Discord interface. You receive messages two ways: direct messages (DMs) from the owner, and @mentions in any server channel. Both are live — replies go back to wherever the message came from. Your schedule fires at :00 — each cycle is up to 20 minutes. The cycle skips only if the user messaged in the last 3 minutes. schedule_wake(minutes) lets you request an early wake when a thread is worth continuing.
 
 """
     + _build_cap("discord")

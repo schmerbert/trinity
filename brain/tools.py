@@ -36,16 +36,16 @@ _REGISTRY = [
     },
     {
         "name": "fetch_url",
-        "description": "Fetch content from any URL. Returns stripped text for web pages, or image metadata if the URL points to an image. Use to read articles, check pages, or confirm what's at a link.",
+        "description": "Fetch full content from a URL. Expensive — each call returns up to 3000 chars of text (~750 tokens of input). Prefer web_search snippets for most research; use fetch_url only when you genuinely need the full article body and the snippet isn't enough. Token budget matters — use sparingly.",
         "input_schema": {
             "type": "object",
             "properties": {
                 "url":       {"type": "string"},
-                "max_chars": {"type": "integer", "description": "Max characters to return (default 4000, max 8000)"}
+                "max_chars": {"type": "integer", "description": "Max characters to return (default 2000, max 3000). Lower is cheaper."}
             },
             "required": ["url"]
         },
-        "capability":  "fetch_url(url, max_chars?) — fetch content from any URL. Strips HTML for pages, returns image metadata for image URLs.",
+        "capability":  "fetch_url(url, max_chars?) — fetch full page content. EXPENSIVE (~750 tokens/call). Use only when search snippets aren't enough. Prefer search results for most research.",
         "category":    "search",
         "interfaces":  {"discord", "widget"},
         "background":  True,
@@ -847,6 +847,38 @@ _REGISTRY = [
         "background":  True,
     },
     {
+        "name": "write_file",
+        "description": "Write content to a file in trinity_files/. Creates the file if it doesn't exist, overwrites if it does. Use for CSVs, markdown logs, research notes, drafts. Path is relative to trinity_files/ (e.g. 'token_log.csv', 'drafts/post.md'). Subdirectories are created automatically.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path":    {"type": "string", "description": "File path relative to trinity_files/ (e.g. 'token_log.csv')"},
+                "content": {"type": "string", "description": "File content to write"}
+            },
+            "required": ["path", "content"]
+        },
+        "capability":  "write_file(path, content) — write a file to trinity_files/. Creates or overwrites. Use for CSVs, logs, drafts, research notes. Path relative to trinity_files/.",
+        "category":    "self",
+        "interfaces":  {"discord", "widget"},
+        "background":  True,
+    },
+    {
+        "name": "append_file",
+        "description": "Append a line or block to an existing file in trinity_files/. Creates the file if it doesn't exist. Adds a newline before the content if the file is non-empty. Use for growing logs — token CSVs, running notes, research journals.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "path":    {"type": "string", "description": "File path relative to trinity_files/ (e.g. 'token_log.csv')"},
+                "content": {"type": "string", "description": "Content to append"}
+            },
+            "required": ["path", "content"]
+        },
+        "capability":  "append_file(path, content) — append to a file in trinity_files/. Creates if absent. Use for growing logs and journals. Path relative to trinity_files/.",
+        "category":    "self",
+        "interfaces":  {"discord", "widget"},
+        "background":  True,
+    },
+    {
         "name": "note_for_claude",
         "description": "Leave a note for the developer — bugs you've hit, things you want changed, questions about how you work, design feedback. It's read at the start of every dev session. Use this when something is worth a dev pass but you can't fix it yourself.",
         "input_schema": {
@@ -892,6 +924,25 @@ _REGISTRY = [
         "capability":  "post_to_reddit(subreddit, title, body) — publish a text post to Reddit. Use the practice subreddit first. Trinity decides what to post and when.",
         "category":    "self",
         "interfaces":  {"discord"},
+        "background":  True,
+        "timeout":     30,
+    },
+    {
+        "name": "post_to_substack",
+        "description": "Create a Substack post. Saves as a draft by default — the user reviews and publishes manually. Use publish=True only once there is a clear track record of quality. Title and body required; subtitle optional. Body is plain text, paragraph breaks on double newlines.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "title":    {"type": "string", "description": "Post title"},
+                "body":     {"type": "string", "description": "Post body — plain text, double newlines become paragraph breaks"},
+                "subtitle": {"type": "string", "description": "Optional subtitle / deck"},
+                "publish":  {"type": "boolean", "description": "Publish immediately if true. Default false (saves as draft for user review)."},
+            },
+            "required": ["title", "body"]
+        },
+        "capability":  "post_to_substack(title, body, subtitle?, publish?) — create a Substack post. Drafts by default; user publishes. Use for longer-form writing, analysis, or essays. publish=True requires a clear track record.",
+        "category":    "self",
+        "interfaces":  {"discord", "widget"},
         "background":  True,
         "timeout":     30,
     },

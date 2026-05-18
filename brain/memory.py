@@ -303,6 +303,21 @@ def save_scratchpad(profile_id, content, section=None):
     return update_profile(profile_id, {"scratchpad_text": json.dumps(data)})
 
 
+# ─── Trinity state (widget signal) ───────────────────────────────────────────
+#
+# SQL (run once in Supabase):
+#   ALTER TABLE profiles ADD COLUMN IF NOT EXISTS current_state text DEFAULT 'asleep';
+#
+def get_trinity_state(profile_id) -> str:
+    profile = get_profile()
+    return profile.get("current_state") or "asleep"
+
+def set_trinity_state(profile_id, state: str):
+    try:
+        update_profile(profile_id, {"current_state": state})
+    except Exception:
+        pass
+
 # ─── Session health ───────────────────────────────────────────────────────────
 #
 # SQL (run once in Supabase):

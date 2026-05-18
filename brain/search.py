@@ -79,7 +79,7 @@ def fetch_url(url, max_chars=4000):
             text = _re.sub(r'<[^>]+>', ' ', text)
             text = _re.sub(r'\s+', ' ', text).strip()
 
-        max_chars = min(int(max_chars), 8000)
+        max_chars = min(int(max_chars), 3000)
         truncated = len(text) > max_chars
         return {
             "url":          url,

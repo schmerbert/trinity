@@ -3,7 +3,7 @@ import requests
 from datetime import datetime
 
 SOLANA_RPC     = os.getenv("SOLANA_RPC_URL", "https://api.mainnet-beta.solana.com")
-JUPITER_PRICE  = "https://price.jup.ag/v6/price"
+JUPITER_PRICE  = "https://api.jup.ag/price/v2"
 TOKEN_PROGRAM  = "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
 
 
@@ -57,7 +57,7 @@ def get_wallet_history(address: str, limit: int = 10) -> dict:
 
 
 def get_token_price(token: str) -> dict:
-    """Token price in USD via Jupiter Price API. Pass symbol (SOL, USDC) or mint address."""
+    """Token price in USD via Jupiter Price API v2. Pass mint address (symbols not supported in v2)."""
     resp = requests.get(JUPITER_PRICE, params={"ids": token}, timeout=10)
     data = resp.json().get("data", {})
     if token in data:

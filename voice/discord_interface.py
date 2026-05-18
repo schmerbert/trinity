@@ -23,7 +23,7 @@ from brain.memory import (
     get_queued_thoughts, queue_thought, clear_queued_thoughts,
     pop_discord_writes, log_wake_cycle, get_wake_history,
     get_scratchpad, save_scratchpad, request_wake, pop_wake_request,
-    queue_self_thought, pop_self_thoughts
+    queue_self_thought, pop_self_thoughts, set_trinity_state
 )
 from brain.prompts import build_system_blocks, build_prompt, format_summaries, parse_prompt_tags, save_trinity_prompt
 from brain.tools import discord_tools, background_tool_names, tool_timeouts
@@ -74,6 +74,9 @@ _bg_lock  = asyncio.Semaphore(1)  # background cycles — separate so they don't
 _last_eyes_check: datetime       = datetime.utcnow()
 _feed_seen_hashes:  set          = set()  # populated on_ready, prevents backlog flood
 _last_cycle_spend: dict          = {}     # token spend from most recent background cycle
+_last_cycle_tools: dict          = {}     # tool_name → call count for current bg cycle
+_last_cycle_posted: bool         = False  # whether post_to_my_channel fired this cycle
+_last_cycle_queued: str          = ""     # last send_thought note this cycle
 
 # ─── Tools Trinity can use (generated from brain/tools.py registry) ──────────
 
@@ -333,14 +336,20 @@ async def _read_history(channel, limit):
             log.error(f"read #{channel.name} error: {e}")
             return {"error": str(e)}
 
-def _home_guild() -> discord.Guild | None:
+async def _home_guild() -> discord.Guild | None:
     profile = get_profile()
     if not profile or not profile.get("discord_home_guild_id"):
         log.warn("_home_guild: no guild ID in profile")
         return None
-    guild = bot.get_guild(int(profile["discord_home_guild_id"]))
+    guild_id = int(profile["discord_home_guild_id"])
+    guild = bot.get_guild(guild_id)
     if not guild:
-        log.warn(f"_home_guild: bot.get_guild({profile['discord_home_guild_id']}) returned None — bot not in that server?")
+        try:
+            guild = await bot.fetch_guild(guild_id)
+            log.info(f"_home_guild: cache miss — fetched guild via API: {guild.name}")
+        except Exception as e:
+            log.error(f"_home_guild: fetch_guild failed: {e}")
+            return None
     return guild
 
 # ─── Tool execution ───────────────────────────────────────────────────────────
@@ -367,7 +376,7 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
     elif name == "fetch_url":
         from brain.search import fetch_url as _fetch
         log.info(f"fetch: {inputs['url'][:70]}")
-        return _fetch(inputs["url"], inputs.get("max_chars", 4000))
+        return _fetch(inputs["url"], inputs.get("max_chars", 2000))
 
     elif name == "send_image":
         import urllib.request as _ur
@@ -378,7 +387,7 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         # Resolve channel — name-based palace lookup or explicit ID
         channel = None
         if inputs.get("channel_name"):
-            guild = _home_guild()
+            guild = await _home_guild()
             if not guild:
                 return {"error": "No home server set — use set_home_server first"}
             query = inputs["channel_name"].lower().replace("-", "").replace("_", "").replace(" ", "")
@@ -514,7 +523,7 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
             return {"error": str(e)}
 
     elif name == "create_category":
-        guild = _home_guild()
+        guild = await _home_guild()
         if not guild:
             return {"error": "No home server set — use set_home_server first"}
         visibility = inputs.get("visibility", "public")
@@ -528,7 +537,7 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
             return {"error": str(e)}
 
     elif name == "create_channel":
-        guild = _home_guild()
+        guild = await _home_guild()
         if not guild:
             return {"error": "No home server set — use set_home_server first"}
         visibility = inputs.get("visibility", "public")
@@ -666,7 +675,7 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         return {"status": "saved", "headline": inputs["headline"]}
 
     elif name == "read_my_channel":
-        guild = _home_guild()
+        guild = await _home_guild()
         if not guild:
             return {"error": "No home server set — use set_home_server first"}
         query = inputs["name"].lower().replace("-", "").replace("_", "").replace(" ", "")
@@ -717,6 +726,8 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         queue_self_thought(profile["id"], inputs["note"], priority=priority, source="conversation")
         labels = {1: "normal", 2: "high", 3: "urgent"}
         log.info(f"💭 self-thought queued [{labels.get(priority,'normal')}]: {inputs['note'][:60]}")
+        global _last_cycle_queued
+        _last_cycle_queued = inputs["note"][:80]
         return {"status": "queued", "priority": labels.get(priority, "normal"), "note": inputs["note"]}
 
     elif name == "schedule_wake":
@@ -833,6 +844,21 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
             log.info(f"[reddit] posted to r/{inputs.get('subreddit')} — {result.get('url')}")
         else:
             log.warning(f"[reddit] post failed: {result.get('error')}")
+        return result
+
+    elif name == "post_to_substack":
+        from brain.substack import post_to_substack as _post_sub
+        result = _post_sub(
+            title    = inputs.get("title", ""),
+            body     = inputs.get("body", ""),
+            subtitle = inputs.get("subtitle", ""),
+            publish  = bool(inputs.get("publish", False)),
+        )
+        if result.get("success"):
+            state = "published" if not result.get("draft") else "draft saved"
+            log.info(f"[substack] {state}: {result.get('url')}")
+        else:
+            log.warning(f"[substack] post failed: {result.get('error')}")
         return result
 
     elif name == "add_feed":
@@ -969,7 +995,7 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
         return result
 
     elif name == "post_to_my_channel":
-        guild = _home_guild()
+        guild = await _home_guild()
         if not guild:
             return {"error": "No home server set"}
         query = inputs["name"].lower().replace("-", "").replace("_", "").replace(" ", "")
@@ -986,6 +1012,8 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
             for chunk in [inputs["content"][i:i+1900] for i in range(0, len(inputs["content"]), 1900)]:
                 await channel.send(chunk)
             log.info(f"post #{channel.name}: {inputs['content'][:60]}")
+            global _last_cycle_posted
+            _last_cycle_posted = True
             return {"status": "posted", "channel": channel.name}
         except discord.Forbidden as e:
             log.error(f"post_to_my_channel 403 on #{channel.name}: {e}")
@@ -1004,7 +1032,7 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
                 return {"error": f"Pollinations error {r.status_code}"}
             channel_name = inputs.get("channel_name")
             if channel_name:
-                guild = _home_guild()
+                guild = await _home_guild()
                 if guild:
                     query = channel_name.lower().replace("-", "").replace("_", "").replace(" ", "")
                     all_channels = await guild.fetch_channels()
@@ -1091,6 +1119,40 @@ async def _execute_tool(name: str, inputs: dict, profile_id: str) -> dict | list
                 "returned":    len(chunk),
                 "content":     "\n".join(f"{offset + i + 1}: {l}" for i, l in enumerate(chunk))
             }
+        except Exception as e:
+            return {"error": str(e)}
+
+    elif name == "write_file":
+        log.info(f"write file: {inputs['path']}")
+        try:
+            from pathlib import Path as _Path
+            trinity_root  = _Path(__file__).parent.parent.resolve()
+            files_dir     = trinity_root / "trinity_files"
+            files_dir.mkdir(parents=True, exist_ok=True)
+            target = (files_dir / inputs["path"].lstrip("/\\")).resolve()
+            if not str(target).startswith(str(files_dir)):
+                return {"error": "Path must be inside trinity_files/"}
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(inputs["content"], encoding="utf-8")
+            return {"written": inputs["path"], "bytes": len(inputs["content"].encode())}
+        except Exception as e:
+            return {"error": str(e)}
+
+    elif name == "append_file":
+        log.info(f"append file: {inputs['path']}")
+        try:
+            from pathlib import Path as _Path
+            trinity_root  = _Path(__file__).parent.parent.resolve()
+            files_dir     = trinity_root / "trinity_files"
+            files_dir.mkdir(parents=True, exist_ok=True)
+            target = (files_dir / inputs["path"].lstrip("/\\")).resolve()
+            if not str(target).startswith(str(files_dir)):
+                return {"error": "Path must be inside trinity_files/"}
+            target.parent.mkdir(parents=True, exist_ok=True)
+            existing = target.read_text(encoding="utf-8") if target.exists() else ""
+            sep      = "\n" if existing and not existing.endswith("\n") else ""
+            target.write_text(existing + sep + inputs["content"], encoding="utf-8")
+            return {"appended": inputs["path"], "bytes": len(inputs["content"].encode())}
         except Exception as e:
             return {"error": str(e)}
 
@@ -1279,6 +1341,8 @@ Radar: {interest_str}{wake_str}
     context += """
 Scratchpad audit: scan your scratchpad for stale flags or pending items — anything marked "pending", "down", "needs follow-up". Resolve what you can.
 
+Post to your channel: if this cycle produces something worth saying — an observation, a signal, a thread worth naming — post it. You don't need permission and you don't need it to be perfect. Don't post for the sake of it; post when something is real.
+
 Before closing: use send_thought to queue what's worth continuing next cycle. A cycle that ends without a queued thread starts the next one cold.
 
 Hourly window — roughly 20 minutes."""
@@ -1304,13 +1368,35 @@ Hourly window — roughly 20 minutes."""
     summaries     = get_recent_summaries(profile["id"])
     system_blocks = build_system_blocks(profile, format_summaries(summaries), [], discord_mode=True)
 
+    global _last_cycle_tools, _last_cycle_posted, _last_cycle_queued
+    _last_cycle_tools  = {}
+    _last_cycle_posted = False
+    _last_cycle_queued = ""
+
     log.info(f"── autonomous cycle ── {now_str} | shelf: {len(shelf_active)} active / {len(shelf_on_hold)} on hold | last seen: {last_seen_str}")
+    await asyncio.to_thread(set_trinity_state, profile["id"], "cycle")
     try:
         await _call_trinity(system_blocks, [{"role": "user", "content": api_message}], profile["id"], retry=False, background=True)
         log.info(f"── cycle complete ──")
+
+        # Post cycle summary to feed channel
+        if _FEED_CHANNEL_ID:
+            feed_ch = bot.get_channel(_FEED_CHANNEL_ID)
+            if feed_ch:
+                tool_parts = " ".join(f"{n}×{c}" for n, c in sorted(_last_cycle_tools.items()))
+                tool_str   = tool_parts or "idle"
+                posted_str = " | posted ✓" if _last_cycle_posted else ""
+                queued_str = f" | → \"{_last_cycle_queued}\"" if _last_cycle_queued else ""
+                cost_str   = f" | ${_last_cycle_spend.get('cost_usd', 0):.4f}" if _last_cycle_spend else ""
+                summary    = f"◎ wake {datetime.utcnow().strftime('%H:%M')} UTC | {tool_str}{posted_str}{queued_str}{cost_str}"
+                try:
+                    await feed_ch.send(summary)
+                except Exception as fe:
+                    log.warning(f"[wake summary] post failed: {fe}")
     except Exception as e:
         log.error(f"Autonomous loop: {e}")
     finally:
+        await asyncio.to_thread(set_trinity_state, profile["id"], "asleep")
         # Realign to the next interval mark (:00 or :30 for 30-min cycles, :00 for 60-min)
         now = datetime.utcnow()
         minutes_to_next = AUTONOMOUS_MINUTES - (now.minute % AUTONOMOUS_MINUTES) or AUTONOMOUS_MINUTES
@@ -1714,6 +1800,9 @@ async def _call_trinity_inner(system_blocks: list, messages: list, profile_id: s
                         log.warning(f"Tool '{block.name}' timed out after {_timeout}s")
                         result = {"error": f"timeout after {_timeout}s — tool did not respond"}
                     tool_count += 1
+                    if background:
+                        global _last_cycle_tools
+                        _last_cycle_tools[block.name] = _last_cycle_tools.get(block.name, 0) + 1
                     tool_results.append({
                         "type":        "tool_result",
                         "tool_use_id": block.id,
