@@ -1837,10 +1837,19 @@ class TrinityWidget(QMainWindow):
             _hb(self.profile["id"])
 
     def _quit(self):
+        for timer in (
+            self._heartbeat_timer, self._tts_poll, self._alert_poll,
+            self._urgent_poll, self._log_poll, self._state_poll, self._idle_timer,
+        ):
+            timer.stop()
+        if self._panel_container:
+            self._panel_container._refresh_timer.stop()
+        if hasattr(self, "worker") and self.worker.isRunning():
+            self.worker.terminate()
+            self.worker.wait(2000)
         if self.profile:
             from brain.memory import write_clean_close as _wcc
             _wcc(self.profile["id"])
-        self._heartbeat_timer.stop()
         if self.profile and self._scratchpad:
             save_scratchpad(self.profile["id"], self._scratchpad._text.toPlainText(), section="general")
         if self.profile and len(self.history) > 2:
@@ -1881,6 +1890,14 @@ Conversation:
 
 
 def main():
+    import socket
+    _lock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        _lock.bind(("127.0.0.1", 47291))
+    except OSError:
+        print("[Trinity] Already running — refusing to start a second instance.")
+        sys.exit(1)
+
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     widget = TrinityWidget()
