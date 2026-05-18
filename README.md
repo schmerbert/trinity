@@ -66,6 +66,8 @@ Brain
 
 **Memory** is structured and tiered. Supabase holds everything persistent. The static system prompt block (identity, capabilities, self-authored rules) is cached at Anthropic for one hour — reads cost a tenth of writes. The dynamic block (current time, interests, recent summaries, shelf) is uncached and fresh every call. The scratchpad is a display surface read on demand, not injected into context.
 
+**Trinity's wallet:** `LwdWTk2xdwRRDa5Qd5abh2aa1rFET1vHzQDkpCBVLDP`
+
 ---
 
 ## The Ethos
