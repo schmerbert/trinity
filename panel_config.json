@@ -1,0 +1,13 @@
+{
+  "panels": {
+    "scratchpad": {"enabled": true, "order": 0},
+    "hud":        {"enabled": true, "order": 1}
+  },
+  "wave": {
+    "asleep_opacity":        80,
+    "cycle_pulse_period_ms": 1200,
+    "watching_inhale_ms":    4000,
+    "watching_hold_ms":      6000,
+    "watching_exhale_ms":    2000
+  }
+}

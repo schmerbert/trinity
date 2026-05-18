@@ -34,17 +34,17 @@ from brain.logger import get_logger
 log = get_logger("WIDGET")
 
 try:
-    from voice.extensions.scratchpad import ScratchpadPanel
-    _SCRATCHPAD = True
+    from voice.extensions.panel_container import PanelContainer
+    _PANELS = True
 except ImportError:
-    _SCRATCHPAD = False
+    _PANELS = False
 from brain.memory import (
     get_profile, create_profile, update_profile,
     add_interest, add_feedback, save_conversation_summary,
     get_recent_summaries, get_unseen_alerts, mark_alerts_seen,
     process_feedback, get_queued_thoughts, clear_queued_thoughts,
     push_discord_write, update_last_seen, get_scratchpad, save_scratchpad,
-    request_wake
+    request_wake, get_trinity_state
 )
 
 # --- Colors ---
@@ -124,24 +124,106 @@ def _split_sentences(text):
 
 # --- Wave Widget ---
 class WaveWidget(QWidget):
+    """Four-state wave animation.
+
+    States (set via set_state()):
+      asleep  — flat line, low opacity. Present, not running.
+      cycle   — periodic pulse. Processing at intervals.
+      watching — slow asymmetric breath (4s in / 6s hold / 2s out), dimmed alert
+                 color. Attention held on something specific.
+      speech  — full amplitude wave synced to voice output.
+
+    Legacy states idle/active/alert/urgent still accepted for compat.
+    Animation parameters are loaded from panel_config.json["wave"].
+    """
+
+    _TICK_MS = 30
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setMinimumHeight(55)
-        self.phase = 0.0
-        self.amplitude = 8.0
-        self.target_amplitude = 8.0
-        self.speed = 0.04
-        self.wave_color = COLOR_WAVE_IDLE
-        self.target_color = COLOR_WAVE_IDLE
+
+        # Load wave config (falls back to defaults if file absent)
+        self._cfg = self._load_wave_cfg()
+
+        # Shared animation state
+        self.phase          = 0.0
+        self.amplitude      = 0.8
+        self.target_amplitude = 0.8
+        self.speed          = 0.04
+        self.wave_color     = COLOR_WAVE_IDLE
+        self.target_color   = COLOR_WAVE_IDLE
+
+        # Opacity (0.0–1.0)
+        self._opacity        = self._cfg["asleep_opacity"] / 255
+        self._target_opacity = self._opacity
+
+        # Mode-specific counters
+        self._mode       = "asleep"
+        self._pulse_t    = 0          # ticks, wraps per period
+        self._breath_ms  = 0          # ms into 12 s breath cycle
 
         self.timer = QTimer()
         self.timer.timeout.connect(self._tick)
-        self.timer.start(30)
+        self.timer.start(self._TICK_MS)
+
+    @staticmethod
+    def _load_wave_cfg() -> dict:
+        import json, os
+        path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "panel_config.json"
+        )
+        defaults = {
+            "asleep_opacity": 80,
+            "cycle_pulse_period_ms": 1200,
+            "watching_inhale_ms": 4000,
+            "watching_hold_ms": 6000,
+            "watching_exhale_ms": 2000,
+        }
+        try:
+            with open(path) as f:
+                data = json.load(f)
+            return {**defaults, **data.get("wave", {})}
+        except Exception:
+            return defaults
 
     def _tick(self):
         self.phase += self.speed
-        self.amplitude += (self.target_amplitude - self.amplitude) * 0.1
-        self.wave_color = self._lerp_color(self.wave_color, self.target_color, 0.05)
+
+        # Per-mode amplitude target
+        if self._mode == "asleep":
+            self.target_amplitude = 0.8
+
+        elif self._mode == "cycle":
+            period_ticks = max(1, self._cfg["cycle_pulse_period_ms"] // self._TICK_MS)
+            self._pulse_t = (self._pulse_t + 1) % (period_ticks * 2)
+            self.target_amplitude = 4 + 8 * abs(math.sin(
+                math.pi * self._pulse_t / period_ticks
+            ))
+
+        elif self._mode == "watching":
+            inhale = self._cfg["watching_inhale_ms"]
+            hold   = self._cfg["watching_hold_ms"]
+            exhale = self._cfg["watching_exhale_ms"]
+            total  = inhale + hold + exhale
+            self._breath_ms = (self._breath_ms + self._TICK_MS) % total
+            t = self._breath_ms
+            if t < inhale:
+                self.amplitude = 1 + 11 * (t / inhale)
+            elif t < inhale + hold:
+                self.amplitude = 12
+            else:
+                self.amplitude = 1 + 11 * (1 - (t - inhale - hold) / exhale)
+            # Skip the normal lerp for watching — track the envelope directly
+            self.target_amplitude = self.amplitude
+
+        # Smooth amplitude and color toward targets (except watching handles it above)
+        if self._mode != "watching":
+            self.amplitude += (self.target_amplitude - self.amplitude) * 0.12
+
+        self.wave_color  = self._lerp_color(self.wave_color, self.target_color, 0.05)
+        self._opacity   += (self._target_opacity - self._opacity) * 0.04
         self.update()
 
     def _lerp_color(self, c1, c2, t):
@@ -152,17 +234,51 @@ class WaveWidget(QWidget):
             255
         )
 
-    def set_state(self, state):
-        states = {
-            "idle":   (8.0,  0.04, COLOR_WAVE_IDLE),
-            "active": (18.0, 0.09, COLOR_WAVE_TALK),
-            "alert":  (14.0, 0.06, COLOR_WAVE_ALERT),
-            "urgent": (22.0, 0.13, COLOR_WAVE_URGENT),
-        }
-        amp, spd, col = states.get(state, states["idle"])
-        self.target_amplitude = amp
-        self.speed = spd
-        self.target_color = col
+    def set_state(self, state: str):
+        self._mode = state
+        self._pulse_t   = 0
+        self._breath_ms = 0
+
+        if state == "asleep":
+            self.speed            = 0.02
+            self.target_color     = COLOR_WAVE_IDLE
+            self._target_opacity  = self._cfg["asleep_opacity"] / 255
+
+        elif state == "cycle":
+            self.speed            = 0.04
+            self.target_color     = COLOR_WAVE_IDLE
+            self._target_opacity  = 0.70
+
+        elif state == "watching":
+            self.speed            = 0.015
+            # Dimmed alert: ALERT color blended toward dark
+            alert = COLOR_WAVE_ALERT
+            self.target_color     = QColor(
+                alert.red() // 2, alert.green() // 2, alert.blue() // 2
+            )
+            self._target_opacity  = 0.50
+
+        elif state == "speech":
+            self.speed            = 0.09
+            self.target_amplitude = 18.0
+            self.target_color     = COLOR_WAVE_TALK
+            self._target_opacity  = 1.0
+
+        # Legacy aliases
+        elif state == "idle":
+            self.set_state("asleep")
+        elif state == "active":
+            self.set_state("speech")
+        elif state == "alert":
+            self.speed            = 0.06
+            self.target_amplitude = 14.0
+            self.target_color     = COLOR_WAVE_ALERT
+            self._target_opacity  = 0.85
+        elif state == "urgent":
+            self.speed            = 0.13
+            self.target_amplitude = 22.0
+            self.target_color     = COLOR_WAVE_URGENT
+            self._target_opacity  = 1.0
 
     def paintEvent(self, event):
         painter = QPainter(self)
@@ -172,14 +288,16 @@ class WaveWidget(QWidget):
         steps = w * 2
 
         glow = QColor(self.wave_color)
-        glow.setAlpha(35)
+        glow.setAlpha(int(35 * self._opacity))
         pen_glow = QPen(glow)
         pen_glow.setWidth(7)
         painter.setPen(pen_glow)
         path = self._make_path(w, mid, steps)
         painter.drawPath(path)
 
-        pen = QPen(self.wave_color)
+        wave = QColor(self.wave_color)
+        wave.setAlpha(int(255 * self._opacity))
+        pen = QPen(wave)
         pen.setWidth(2)
         painter.setPen(pen)
         painter.drawPath(path)
@@ -302,7 +420,7 @@ class TrinityWorker(QThread):
     def _execute_tool(self, name, inputs):
         if name == "fetch_url":
             from brain.search import fetch_url as _fetch
-            return _fetch(inputs["url"], inputs.get("max_chars", 4000))
+            return _fetch(inputs["url"], inputs.get("max_chars", 2000))
 
         elif name == "web_search":
             from brain.search import ddg_search
@@ -456,6 +574,21 @@ class TrinityWorker(QThread):
                 return {"status": "written"}
             except Exception as e:
                 return {"error": str(e)}
+
+        elif name == "post_to_substack":
+            from brain.substack import post_to_substack as _post_sub
+            result = _post_sub(
+                title    = inputs.get("title", ""),
+                body     = inputs.get("body", ""),
+                subtitle = inputs.get("subtitle", ""),
+                publish  = bool(inputs.get("publish", False)),
+            )
+            if result.get("success"):
+                state = "published" if not result.get("draft") else "draft saved"
+                log.info(f"[substack] {state}: {result.get('url')}")
+            else:
+                log.warning(f"[substack] post failed: {result.get('error')}")
+            return result
 
         elif name == "get_wallet_balance":
             try:
@@ -729,6 +862,36 @@ class TrinityWorker(QThread):
             except Exception as e:
                 return {"error": str(e)}
 
+        elif name == "write_file":
+            try:
+                trinity_root = Path(__file__).parent.parent.resolve()
+                files_dir    = trinity_root / "trinity_files"
+                files_dir.mkdir(parents=True, exist_ok=True)
+                target = (files_dir / inputs["path"].lstrip("/\\")).resolve()
+                if not str(target).startswith(str(files_dir)):
+                    return {"error": "Path must be inside trinity_files/"}
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_text(inputs["content"], encoding="utf-8")
+                return {"written": inputs["path"], "bytes": len(inputs["content"].encode())}
+            except Exception as e:
+                return {"error": str(e)}
+
+        elif name == "append_file":
+            try:
+                trinity_root = Path(__file__).parent.parent.resolve()
+                files_dir    = trinity_root / "trinity_files"
+                files_dir.mkdir(parents=True, exist_ok=True)
+                target = (files_dir / inputs["path"].lstrip("/\\")).resolve()
+                if not str(target).startswith(str(files_dir)):
+                    return {"error": "Path must be inside trinity_files/"}
+                target.parent.mkdir(parents=True, exist_ok=True)
+                existing = target.read_text(encoding="utf-8") if target.exists() else ""
+                sep      = "\n" if existing and not existing.endswith("\n") else ""
+                target.write_text(existing + sep + inputs["content"], encoding="utf-8")
+                return {"appended": inputs["path"], "bytes": len(inputs["content"].encode())}
+            except Exception as e:
+                return {"error": str(e)}
+
         return {"error": f"Unknown tool: {name}"}
 
     def _read_discord_channel(self, name_query, limit=20):
@@ -808,7 +971,8 @@ class TrinityWidget(QMainWindow):
         self._setup_window()
         self._setup_ui()
         self._setup_tray()
-        self._scratchpad = ScratchpadPanel(self) if _SCRATCHPAD else None
+        self._panel_container = PanelContainer(self) if _PANELS else None
+        self._scratchpad = self._panel_container.scratchpad if self._panel_container else None
         self._init_log()
         self._init_tts()
         self.sentence_spoken.connect(self._on_sentence_spoken)
@@ -847,6 +1011,12 @@ class TrinityWidget(QMainWindow):
         self._heartbeat_timer = QTimer()
         self._heartbeat_timer.setInterval(10 * 60 * 1000)
         self._heartbeat_timer.timeout.connect(self._write_heartbeat)
+
+        # Trinity state poll — syncs wave animation with background cycle state
+        self._state_poll = QTimer()
+        self._state_poll.setInterval(30_000)
+        self._state_poll.timeout.connect(self._poll_trinity_state)
+        self._state_poll.start()
 
         self._init_trinity()
 
@@ -918,11 +1088,11 @@ class TrinityWidget(QMainWindow):
         header.addWidget(title)
         header.addWidget(self.status_label)
         header.addStretch()
-        if _SCRATCHPAD:
+        if _PANELS:
             self.scratch_btn = QPushButton("✎")
             self.scratch_btn.setFixedSize(28, 28)
             self.scratch_btn.setStyleSheet(btn_style)
-            self.scratch_btn.setToolTip("Scratchpad")
+            self.scratch_btn.setToolTip("Panels")
             self.scratch_btn.clicked.connect(self._toggle_scratchpad)
             header.addWidget(self.scratch_btn)
         header.addWidget(self.stop_btn)
@@ -1104,7 +1274,7 @@ class TrinityWidget(QMainWindow):
 
     # --- Trinity init ---
     def _init_trinity(self):
-        self.wave.set_state("active")
+        self.wave.set_state("cycle")
         self.status_label.setText("waking up...")
 
         self.profile = get_profile()
@@ -1129,14 +1299,13 @@ class TrinityWidget(QMainWindow):
 
             update_last_seen(self.profile["id"])
             log.info(f"Startup — profile: {self.profile.get('name', '?')} | alerts: {len(unseen)} | queued: {len(queued)}")
-            if _SCRATCHPAD and self._scratchpad:
-                saved = get_scratchpad(self.profile["id"])
-                if saved:
-                    if isinstance(saved, dict):
-                        parts = [f"[{k}]\n{v}" for k, v in saved.items() if v]
-                        self._scratchpad._text.setPlainText("\n\n".join(parts))
-                    else:
-                        self._scratchpad._text.setPlainText(str(saved))
+            if self._panel_container:
+                self._panel_container.set_profile_id(self.profile["id"])
+            if self._scratchpad:
+                general = get_scratchpad(self.profile["id"], section="general")
+                if general:
+                    self._scratchpad._text.setPlainText(str(general))
+            self.wave.set_state("asleep")
             self._last_input = opening
             self._ask_trinity(opening)
             self._alert_poll.start()
@@ -1162,7 +1331,7 @@ class TrinityWidget(QMainWindow):
         mark_alerts_seen(self.profile["id"])
         clear_queued_thoughts(self.profile["id"])
         self.wave.set_state("alert")
-        QTimer.singleShot(6000, lambda: self.wave.set_state("idle"))
+        QTimer.singleShot(6000, lambda: self.wave.set_state("asleep"))
 
     def _check_urgent_alerts(self):
         if not self.profile:
@@ -1180,12 +1349,12 @@ class TrinityWidget(QMainWindow):
     # --- Trinity query ---
     def _ask_trinity(self, user_text):
         log.info(f"user: {user_text[:80]}")
-        self.wave.set_state("active")
+        self.wave.set_state("speech")
         self.status_label.setText("thinking...")
         self.input_field.setEnabled(False)
         self._stream_buffer = ""
 
-        extensions    = ["scratchpad"] if _SCRATCHPAD else []
+        extensions    = ["scratchpad"] if _PANELS and self._scratchpad else []
         system_blocks = build_system_blocks(self.profile, self.summary_text, self.history, extensions=extensions)
         messages = self.history + [{"role": "user", "content": user_text}]
 
@@ -1222,12 +1391,12 @@ class TrinityWidget(QMainWindow):
         self.history = self.history[-20:]
 
         self._log("trinity", clean)
-        log.info(f"Response ({len(clean)} chars){' [scratch]' if self._scratchpad and self._scratchpad._visible else ''}")
+        log.info(f"Response ({len(clean)} chars){' [panels]' if self._panel_container and self._panel_container.is_visible() else ''}")
         try:
             request_wake(self.profile["id"])
         except Exception:
             pass
-        self.wave.set_state("idle")
+        self.wave.set_state("asleep")
         self.status_label.setText("watching")
         self.input_field.setEnabled(True)
         self.input_field.setFocus()
@@ -1252,7 +1421,7 @@ class TrinityWidget(QMainWindow):
     def _on_error(self, msg):
         log.error(f"API: {msg[:120]}")
         self._display(msg)
-        self.wave.set_state("idle")
+        self.wave.set_state("asleep")
         self.status_label.setText("watching")
         self.input_field.setEnabled(True)
 
@@ -1371,16 +1540,15 @@ class TrinityWidget(QMainWindow):
         except Exception:
             pass
 
-    # --- Scratchpad extension ---
+    # --- Panel / scratchpad extension ---
     def _toggle_scratchpad(self):
-        if self._scratchpad:
-            self._scratchpad.toggle()
+        if self._panel_container:
+            self._panel_container.toggle()
 
     def _parse_scratch(self, reply):
         if not self._scratchpad or "<scratch>" not in reply:
             return reply
         parts = re.split(r'<scratch>(.*?)</scratch>', reply, flags=re.DOTALL)
-        # Even indices are text segments, odd indices are scratch content
         text_parts = [parts[i].strip() for i in range(0, len(parts), 2) if parts[i].strip()]
         clean = "\n\n".join(text_parts)
         for i in range(1, len(parts), 2):
@@ -1392,7 +1560,7 @@ class TrinityWidget(QMainWindow):
         return clean
 
     def _on_scratchpad_write(self, content):
-        if _SCRATCHPAD and self._scratchpad:
+        if self._scratchpad:
             self._scratchpad._text.setPlainText(content)
 
     # --- Thought routing (widget → Discord palace) ---
@@ -1635,8 +1803,8 @@ class TrinityWidget(QMainWindow):
 
     def moveEvent(self, event):
         super().moveEvent(event)
-        if self._scratchpad:
-            self._scratchpad.follow_parent()
+        if self._panel_container:
+            self._panel_container.follow_parent()
 
     def mouseReleaseEvent(self, event):
         self.drag_pos = None
@@ -1651,6 +1819,18 @@ class TrinityWidget(QMainWindow):
             self.raise_()
             self.activateWindow()
 
+    def _poll_trinity_state(self):
+        if not self.profile or self._tts_active:
+            return
+        try:
+            state = get_trinity_state(self.profile["id"])
+            if state in ("asleep", "cycle", "watching"):
+                self.wave.set_state(state)
+                if self._panel_container:
+                    self._panel_container.on_trinity_state(state)
+        except Exception:
+            pass
+
     def _write_heartbeat(self):
         if self.profile:
             from brain.memory import write_heartbeat as _hb
@@ -1661,8 +1841,8 @@ class TrinityWidget(QMainWindow):
             from brain.memory import write_clean_close as _wcc
             _wcc(self.profile["id"])
         self._heartbeat_timer.stop()
-        if self.profile and _SCRATCHPAD and self._scratchpad:
-            save_scratchpad(self.profile["id"], self._scratchpad._text.toPlainText())
+        if self.profile and self._scratchpad:
+            save_scratchpad(self.profile["id"], self._scratchpad._text.toPlainText(), section="general")
         if self.profile and len(self.history) > 2:
             self._summarize()
         QApplication.quit()

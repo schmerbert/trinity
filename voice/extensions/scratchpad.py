@@ -3,25 +3,16 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton,
     QTextEdit, QFrame
 )
-from PyQt6.QtCore import Qt, QTimer, QPoint, pyqtSignal
-from PyQt6.QtGui import QPainter, QPen, QColor, QFont
+from PyQt6.QtCore import Qt, QTimer, QPoint
+from PyQt6.QtGui import QPainter, QPen, QColor, QFont, QTextCursor
 
-WIDTH  = 260
-HEIGHT = 380
+from voice.extensions.base import Panel
 
 _STYLE_BTN = (
     "QPushButton { background: transparent; color: rgb(60,100,150); border: none; font-size: 11px; }"
     "QPushButton:hover { color: rgb(80,180,255); }"
     "QPushButton:checked { color: rgb(80,180,255); }"
 )
-_STYLE_PANEL = """
-    QWidget#panel {
-        background: rgba(8,12,20,230);
-        border: 1px solid rgba(40,140,255,70);
-        border-right: none;
-        border-radius: 6px;
-    }
-"""
 
 
 class DrawCanvas(QWidget):
@@ -74,53 +65,31 @@ class DrawCanvas(QWidget):
         self.update()
 
 
-class ScratchpadPanel(QWidget):
-    """
-    Trinity's left hand — extends from the widget body.
-    Drop voice/extensions/scratchpad.py to enable; remove it to disable.
-    """
+class ScratchpadContent(Panel):
+    """Trinity's left hand — the text/draw scratchpad panel."""
 
-    def __init__(self, parent_widget: QWidget):
-        super().__init__(None)
-        self._parent  = parent_widget
-        self._visible = False
-        self._queue   = ""
+    NAME = "scratch"
+    DESCRIPTION = "Text and drawing scratchpad"
 
-        # Animated writer
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self._queue = ""
+
         self._write_timer = QTimer(self)
         self._write_timer.setInterval(35)
         self._write_timer.timeout.connect(self._tick_write)
 
-        self.setWindowFlags(
-            Qt.WindowType.FramelessWindowHint |
-            Qt.WindowType.WindowStaysOnTopHint |
-            Qt.WindowType.Tool
-        )
-        self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
-        self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
-        self.setFixedSize(WIDTH, HEIGHT)
         self._build_ui()
 
-    # ── UI ────────────────────────────────────────────────────────────────────
-
     def _build_ui(self):
-        panel = QWidget(self)
-        panel.setObjectName("panel")
-        panel.setGeometry(0, 0, WIDTH, HEIGHT)
-        panel.setStyleSheet(_STYLE_PANEL)
-
-        layout = QVBoxLayout(panel)
+        layout = QVBoxLayout(self)
         layout.setContentsMargins(8, 6, 8, 8)
         layout.setSpacing(4)
 
-        # toolbar
         bar = QHBoxLayout()
         self._btn_text  = QPushButton("✎")
         self._btn_draw  = QPushButton("✏")
         self._btn_clear = QPushButton("✕")
-        label = QPushButton("scratch")
-        label.setEnabled(False)
-        label.setStyleSheet("QPushButton { background: transparent; color: rgba(60,100,150,180); border: none; font-size: 9px; font-family: Courier New; }")
 
         for btn in (self._btn_text, self._btn_draw, self._btn_clear):
             btn.setFixedSize(22, 18)
@@ -128,7 +97,6 @@ class ScratchpadPanel(QWidget):
             btn.setCheckable(True)
 
         self._btn_clear.setCheckable(False)
-        bar.addWidget(label)
         bar.addStretch()
         bar.addWidget(self._btn_text)
         bar.addWidget(self._btn_draw)
@@ -140,7 +108,6 @@ class ScratchpadPanel(QWidget):
         sep.setStyleSheet("color: rgba(40,100,180,40);")
         layout.addWidget(sep)
 
-        # text area
         self._text = QTextEdit()
         self._text.setFont(QFont("Courier New", 9))
         self._text.setPlaceholderText("notes...")
@@ -156,7 +123,6 @@ class ScratchpadPanel(QWidget):
         """)
         layout.addWidget(self._text)
 
-        # draw canvas (hidden initially)
         self._canvas = DrawCanvas()
         self._canvas.hide()
         layout.addWidget(self._canvas)
@@ -176,33 +142,7 @@ class ScratchpadPanel(QWidget):
         self._text.clear()
         self._canvas.clear()
 
-    # ── Positioning ───────────────────────────────────────────────────────────
-
-    def _reposition(self):
-        if self._parent:
-            pg = self._parent.geometry()
-            self.move(pg.left() - WIDTH, pg.top())
-
-    def follow_parent(self):
-        if self._visible:
-            self._reposition()
-
-    # ── Toggle ────────────────────────────────────────────────────────────────
-
-    def toggle(self):
-        if self._visible:
-            self.hide()
-            self._visible = False
-        else:
-            self._reposition()
-            self.show()
-            self._visible = True
-
-    # ── Trinity writes to the text layer, animated ───────────────────────────
-
     def write_trinity(self, text: str):
-        if not self._visible:
-            self.toggle()
         self._queue += text
         if not self._write_timer.isActive():
             self._write_timer.start()
@@ -214,15 +154,12 @@ class ScratchpadPanel(QWidget):
         ch = self._queue[0]
         self._queue = self._queue[1:]
         cursor = self._text.textCursor()
-        from PyQt6.QtGui import QTextCursor
         cursor.movePosition(QTextCursor.MoveOperation.End)
         cursor.insertText(ch)
         self._text.setTextCursor(cursor)
         self._text.verticalScrollBar().setValue(
             self._text.verticalScrollBar().maximum()
         )
-
-    # ── Persistence helpers (caller manages save/restore) ────────────────────
 
     def get_state(self) -> dict:
         return {
