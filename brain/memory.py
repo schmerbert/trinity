@@ -202,11 +202,14 @@ def update_last_seen(profile_id):
     from datetime import datetime
     return update_profile(profile_id, {"last_seen": datetime.utcnow().isoformat()})
 
-def push_discord_write(profile_id, content):
+def push_discord_write(profile_id, content, channel_name=None):
     from datetime import datetime
     profile = get_profile()
     writes = profile.get("pending_discord_writes") or []
-    writes.append({"content": content, "at": datetime.utcnow().isoformat()})
+    entry = {"content": content, "at": datetime.utcnow().isoformat()}
+    if channel_name:
+        entry["channel_name"] = channel_name
+    writes.append(entry)
     return update_profile(profile_id, {"pending_discord_writes": writes})
 
 def pop_discord_writes(profile_id):

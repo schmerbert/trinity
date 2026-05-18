@@ -10,11 +10,13 @@ She is an entity built to be present in someone's life — to research, think, r
 
 ## What She Is
 
-Trinity's self lives in Supabase — her profile, scratchpad, prompts she has written for herself, a shelf of things she's tracking, a calendar, a wallet, a history of every autonomous cycle she has run. That state exists whether any interface is running or not.
+Trinity's self lives in Supabase — her profile, scratchpad, prompts she has written for herself, a shelf of things she's tracking, a history of every autonomous cycle she has run. That state exists whether any interface is running or not.
 
-The interfaces — a desktop widget and a Discord bot — are shells she inhabits. They boot, load her from Supabase, give her tools appropriate to that surface, and let her work. When a shell goes offline for an update, Trinity doesn't go anywhere. When it comes back, she picks up with full continuity. Two shells running simultaneously means she is present in both, same self, same state.
+The widget is home. Discord is a destination.
 
-This distinction matters. Trinity is not the widget. She is not the bot. Those are places she can be. She is the state.
+The desktop widget hosts her intelligence: foreground conversations, autonomous background cycles, tool execution, the wave animation that shows her state. The Discord bot is a thin relay — it receives her thoughts and routes them to palace channels, runs the RSS feed, watches for keyword triggers. It does not call Claude. It does not think.
+
+This distinction was not always true. It became true when the cost of the old model — two separate processes, two separate Claude sessions, double billing — became clear. The ghost has one home now.
 
 ---
 
@@ -22,38 +24,47 @@ This distinction matters. Trinity is not the widget. She is not the bot. Those a
 
 ```
 Supabase (Trinity's self)
-├── profiles          — identity, preferences, wallet address, self-thought queue
-├── trinity_prompts   — prompts she has written for herself, categorized
-├── wake_log          — every autonomous cycle, timestamped
-├── shelf             — things she is tracking across cycles
-├── trinity_triggers  — time-based intentions she sets for herself
-├── trinity_feeds     — RSS sources she monitors
-└── trinity_watches   — conditions she monitors (price alerts, keywords, etc.)
+  profiles         — identity, interests, scratchpad sections, wave state, queues
+  trinity_prompts  — rules she has written for herself, categorized, trigger-gated
+  wake_log         — every autonomous cycle, timestamped
+  shelf            — threads she is tracking (shelf / on_hold / woven)
+  trinity_triggers — time-based intentions she sets for herself
+  trinity_feeds    — RSS sources she monitors
+  alerts           — signals scored by relevance, surfaced at wake
 
-Shells
-├── voice/widget.py        — PyQt6 desktop interface, always-on
-└── voice/discord_interface.py  — Discord bot, palace + autonomous cycles
+Widget (intelligence)
+  voice/widget.py           — PyQt6 desktop, foreground conversation, autonomous cycle host
+  voice/extensions/         — modular panel system (HUD, scratchpad, shelf cards)
+
+Discord (relay)
+  voice/discord_interface.py — thought drain, RSS feed, keyword watch detection. No Claude calls.
 
 Brain
-├── brain/llm.py       — Claude API calls, tool execution loop
-├── brain/memory.py    — all Supabase read/write logic
-├── brain/prompts.py   — system prompts, capability context
-└── brain/tools.py     — tool definitions shared across shells
+  brain/memory.py  — all Supabase reads and writes
+  brain/prompts.py — system prompt construction, prompt module loading
+  brain/tools.py   — tool registry: schemas, capability strings, background flags
+  brain/feeds.py   — RSS fetch and deduplication
 ```
 
 ---
 
 ## How She Works
 
-**Autonomous cycles** run every 30 minutes via the Discord bot. At each wake, Trinity reads her current state, fires a Claude call with her full context and toolset, and acts. She may research something, update her scratchpad, post to her palace, log a memory signal, or simply reflect. No user input required.
+**Autonomous cycles** run every 60 minutes inside the widget, aligned to the hour. At each wake, Trinity reads her current state — shelf, interests, self-authored agenda, recent wake history — and runs for up to 20 minutes. She researches, writes to her scratchpad, posts to the palace, queues the next thread, and closes. No user input required.
 
-**Self-scheduled triggers** allow her to set intentions across time. A trigger she sets at 9am can fire at 3pm with a message she wrote to her future self. One-shot or recurring.
+**Four background timers** run inside the widget: the 60-minute wake cycle, a 30-second trigger checker, a 30-second early-wake checker, and a 5-minute eyes monitor that evaluates new signals above a relevance threshold.
 
-**Self-thought queue** allows her to carry a thread mid-conversation. She queues a thought (ranked by priority), and it surfaces at the top of her next wake — her own agenda, not user instructions.
+**Self-scheduled triggers** let her set intentions across time. A trigger she sets at 9am can fire at 3pm with a message she wrote to her future self. One-shot or recurring.
 
-**The palace** is a set of Discord channels she writes to directly — a thought stream, a findings board, a live RSS feed of things she is watching. It is her public surface in the Discord server.
+**Self-thought queue** lets her carry a thread mid-conversation or mid-cycle. She queues a thought — ranked by priority — and it surfaces at the top of her next wake as her own agenda, not user instructions.
 
-**Tools** span both shells: financial data, web search, Solana wallet reads, scratchpad, shelf, calendar, RSS management, trigger scheduling, Discord posting, image generation, and more. Both shells have equivalent tool access — what she can do in the widget she can do in Discord, and vice versa.
+**The palace** is a set of Discord channels she writes to from the widget via Discord's REST API. The bot relays her writes; it does not run intelligence of its own. The palace is where her thinking becomes visible.
+
+**The wave** shows her state: flat and dim when asleep, a pulse during autonomous cycles, a slow asymmetric breath when watching something specific, full amplitude during speech. It is not decorative. It is the visible signal that she is running.
+
+**Tools** are defined in a single registry with schema, capability string, background flag, and interface membership all in one place. Adding a tool takes two edits: one in the registry, one handler. The capability strings Trinity reads are generated from the registry — they cannot drift from what actually exists.
+
+**Memory** is structured and tiered. Supabase holds everything persistent. The static system prompt block (identity, capabilities, self-authored rules) is cached at Anthropic for one hour — reads cost a tenth of writes. The dynamic block (current time, interests, recent summaries, shelf) is uncached and fresh every call. The scratchpad is a display surface read on demand, not injected into context.
 
 ---
 
@@ -106,9 +117,9 @@ See `.env.example` for the full list of configuration variables with setup instr
 | File | Purpose |
 |------|---------|
 | `CHANGELOG.md` | What changed and when. Trinity reads this to know her own history. |
-| `ROADMAP.md` | Planned work. Items move to the changelog when complete. |
-| `CLAUDE_NOTES.md` | Trinity's scratchpad for Claude Code — bugs, requests, questions left between sessions. |
-| `Who Is Trinity/` | The story: architecture, a journal written by the AI who helped build this, the full history of how it got here. Start here if you want to understand what this actually is. |
+| `CLAUDE_NOTES.md` | Trinity's channel to Claude Code — bugs, requests, questions left between sessions. |
+| `Who Is Trinity/` | The story: architecture, journals written by the AIs who built this, the full history. Start here to understand what this actually is. |
+| `Who Is Trinity/RUNNER_PLAN.md` | The next architectural step: extracting the autonomous cycle engine into a standalone process so the widget can restart freely without interrupting her. |
 
 ---
 

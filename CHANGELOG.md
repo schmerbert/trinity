@@ -10,6 +10,38 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-18] — Background cycles: `post_to_my_channel` now queued via Supabase outbox
+
+`AutonomousWorker._execute_tool` overrides `post_to_my_channel` — instead of a synchronous REST call to Discord (which fails silently if Discord is down), background cycles now route through `push_discord_write(channel_name=...)`. `thought_drain` delivers within 30s with implicit retry. Foreground `TrinityWorker` keeps the direct REST call where immediate feedback matters. The existing `pending_discord_writes` + `thought_drain` path is the outbox; no new infrastructure needed.
+
+---
+
+## [2026-05-18] — Background cycles: `<thought>` tags now route to Discord
+
+`AutonomousWorker.run()` was not scanning text blocks for `<thought>` tags. Trinity would write them during wake cycles; they went nowhere. The foreground streaming path handles them in the callback — the non-streaming background path had no equivalent. Fix: after each API response, scan all text content blocks with `<thought>...</thought>` regex and queue matches via `push_discord_write`. `thought_drain` picks them up within 30s and posts to the thought channel. Direct `post_to_my_channel` tool calls were always working — the gap was `<thought>` tags only.
+
+---
+
+## [2026-05-18] — Architecture: Widget is home. Discord is a destination.
+
+The single most significant structural change since Trinity's first commit.
+
+**Problem:** The Discord bot was running a full parallel Claude session — autonomous_loop, eyes_monitor, trigger_checker, wake_checker, _startup_brief, _respond — while the widget was also running. Every 60 minutes: two separate API calls, two cache writes, double the cost. Every DM: full agentic cycle from the bot. This was never intentional; Discord was built first, and the widget never fully replaced it.
+
+**What changed:**
+- `voice/discord_interface.py` stripped of all intelligence: removed `autonomous_loop`, `eyes_monitor`, `trigger_checker`, `wake_checker`, `_startup_brief`, `_palace_pulse`, `_call_trinity`, `_call_trinity_inner`, `_respond`, `_execute_tool`, `_fmt_tool_call`, `_strip_memory`. Also removed `anthropic` import — the bot no longer calls Claude at all.
+- Discord bot is now a thin relay: `thought_drain` (extended to route to arbitrary channels via `channel_name` field), RSS feed, heartbeat, keyword watch detection (now queues a self-thought instead of calling Claude), reaction handler. That's it.
+- DMs deprecated: bot replies "I'm home in the widget now." to any DM or mention.
+- `_check_keyword_watches` converted to write a self-thought (priority 2) instead of firing an immediate Claude cycle.
+- `brain/memory.py`: `push_discord_write` now accepts optional `channel_name` — entries with a channel_name are routed to that palace channel by thought_drain; others fall back to the thought channel.
+- `voice/widget.py`: `AutonomousWorker(TrinityWorker)` added — the full agentic background loop now runs on a QThread inside the widget. Non-streaming, time-bounded (20 min window), inherits all tool handling from `TrinityWorker`, overrides `write_scratchpad` to skip the UI signal (DB write only; panel refresh picks it up).
+- Four new QTimers in the widget: 60-min wake cycle (aligned to :00 on startup), 30s trigger_checker, 30s wake_checker, 5-min eyes_monitor.
+- `background_tool_names` added to brain.tools import; memory imports extended with `get_shelf`, `get_wake_history`, `pop_self_thoughts`, `pop_wake_request`, `check_dirty_close`.
+
+**Result:** One process. One cache write path. One cost center. Discord is where her thoughts go, not where she lives.
+
+---
+
 ## [2026-05-18] — Jupiter Price API endpoint updated (v2)
 
 `JUPITER_PRICE` in `brain/wallet.py` updated from the dead `https://price.jup.ag/v6/price` to `https://api.jup.ag/price/v2`. The old endpoint had dead DNS — `get_token_price` was failing for all wallet price lookups. Response shape is compatible (same `data[mint].price` structure). Note: v2 requires mint addresses, not symbols — docstring updated accordingly.

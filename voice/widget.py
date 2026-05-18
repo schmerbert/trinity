@@ -28,7 +28,7 @@ load_dotenv(dotenv_path=env_path)
 
 import anthropic
 from brain.prompts import build_system_blocks, build_prompt, format_summaries, parse_prompt_tags
-from brain.tools import widget_tools
+from brain.tools import widget_tools, background_tool_names
 from brain.logger import get_logger
 
 log = get_logger("WIDGET")
@@ -44,7 +44,9 @@ from brain.memory import (
     get_recent_summaries, get_unseen_alerts, mark_alerts_seen,
     process_feedback, get_queued_thoughts, clear_queued_thoughts,
     push_discord_write, update_last_seen, get_scratchpad, save_scratchpad,
-    request_wake, get_trinity_state
+    request_wake, get_trinity_state,
+    get_shelf, get_wake_history, pop_self_thoughts, pop_wake_request,
+    check_dirty_close
 )
 
 # --- Colors ---
@@ -948,9 +950,113 @@ class TrinityWorker(QThread):
             return {"error": str(e)}
 
 
+# --- Autonomous background worker ---
+class AutonomousWorker(TrinityWorker):
+    """Background agentic cycle — non-streaming, time-bounded, no UI signals."""
+    cycle_done = pyqtSignal(str)
+
+    def __init__(self, client, system_blocks, profile_id, context):
+        super().__init__(client, system_blocks, [], profile_id)
+        self.bg_context = context
+
+    def run(self):
+        import time as _time
+        import re as _re
+        from brain.memory import set_trinity_state, push_discord_write as _pdw
+        _thought_re = _re.compile(r'<thought>(.*?)</thought>', _re.DOTALL)
+
+        bg_names = background_tool_names()
+        tools    = [t for t in widget_tools() if t["name"] in bg_names]
+        messages = [{"role": "user", "content": self.bg_context}]
+        iters = tool_count = 0
+        tok_in = tok_out = tok_cw = tok_cr = 0
+        t0 = _time.time()
+
+        set_trinity_state(self.profile_id, "cycle")
+        try:
+            while True:
+                if _time.time() - t0 >= 20 * 60 or iters >= 60:
+                    break
+                iters += 1
+                try:
+                    response = self.client.messages.create(
+                        model="claude-sonnet-4-6",
+                        max_tokens=800,
+                        system=self.system_blocks,
+                        messages=messages,
+                        tools=tools
+                    )
+                except Exception as e:
+                    log.error(f"[BG] API error: {e}")
+                    break
+
+                if hasattr(response, "usage"):
+                    u = response.usage
+                    tok_in += getattr(u, "input_tokens", 0)
+                    tok_out += getattr(u, "output_tokens", 0)
+                    tok_cw  += getattr(u, "cache_creation_input_tokens", 0)
+                    tok_cr  += getattr(u, "cache_read_input_tokens", 0)
+
+                for _b in response.content:
+                    if _b.type == "text" and _b.text:
+                        for _m in _thought_re.finditer(_b.text):
+                            _t = _m.group(1).strip()
+                            if _t:
+                                _pdw(self.profile_id, _t)
+                                log.info(f"💬 [BG] thought → Discord queue")
+
+                if response.stop_reason == "end_turn":
+                    break
+
+                if response.stop_reason == "tool_use":
+                    ac = []
+                    for b in response.content:
+                        if b.type == "text":
+                            ac.append({"type": "text", "text": b.text})
+                        elif b.type == "tool_use":
+                            ac.append({"type": "tool_use", "id": b.id, "name": b.name, "input": b.input})
+                        else:
+                            d = b.model_dump()
+                            d.pop("parsed_output", None)
+                            ac.append(d)
+                    messages = messages + [{"role": "assistant", "content": ac}]
+                    results = []
+                    for block in response.content:
+                        if block.type == "tool_use":
+                            log.info(f"→ {_fmt_widget_tool(block.name, block.input)}")
+                            result = self._execute_tool(block.name, block.input)
+                            tool_count += 1
+                            results.append({
+                                "type":        "tool_result",
+                                "tool_use_id": block.id,
+                                "content":     json.dumps(result)
+                            })
+                    messages = messages + [{"role": "user", "content": results}]
+                else:
+                    break
+        finally:
+            set_trinity_state(self.profile_id, "asleep")
+            cost = (tok_in * 3.00 + tok_out * 15.00 + tok_cw * 3.75 + tok_cr * 0.30) / 1_000_000
+            log.info(f"── [BG] done — in:{tok_in:,} out:{tok_out:,} cw:{tok_cw:,} cr:{tok_cr:,} tools:{tool_count} ≈${cost:.4f}")
+            self.cycle_done.emit(f"tools:{tool_count} ≈${cost:.4f}")
+
+    def _execute_tool(self, name, inputs):
+        if name == "write_scratchpad":
+            from brain.memory import save_scratchpad as _ss
+            section = inputs.get("section")
+            _ss(self.profile_id, inputs["content"], section)
+            return {"status": "saved", "section": section or "general"}
+        if name == "post_to_my_channel":
+            from brain.memory import push_discord_write as _pdw
+            _pdw(self.profile_id, inputs["content"], channel_name=inputs.get("name"))
+            return {"status": "queued", "channel": inputs.get("name"), "note": "delivered via thought_drain within 30s"}
+        return super()._execute_tool(name, inputs)
+
+
 # --- Main Widget ---
 class TrinityWidget(QMainWindow):
     sentence_spoken = pyqtSignal(str)
+    _tts_wave_sig   = pyqtSignal(str)   # thread-safe wave state from TTS threads
 
     def __init__(self):
         super().__init__()
@@ -976,6 +1082,7 @@ class TrinityWidget(QMainWindow):
         self._init_log()
         self._init_tts()
         self.sentence_spoken.connect(self._on_sentence_spoken)
+        self._tts_wave_sig.connect(self.wave.set_state)
 
         # Idle collapse timer — hides response area after inactivity
         self._idle_timer = QTimer()
@@ -1017,6 +1124,24 @@ class TrinityWidget(QMainWindow):
         self._state_poll.setInterval(30_000)
         self._state_poll.timeout.connect(self._poll_trinity_state)
         self._state_poll.start()
+
+        # Background cycle infrastructure (started after profile loads in _init_trinity)
+        self._autonomous_worker = None
+        self._wake_align_timer  = QTimer()
+        self._wake_align_timer.setSingleShot(True)
+        self._bg_wake_timer     = QTimer()
+        self._bg_wake_timer.setInterval(60 * 60 * 1000)
+        self._bg_wake_timer.timeout.connect(lambda: self._launch_bg_cycle("cycle"))
+        self._bg_trigger_poll   = QTimer()
+        self._bg_trigger_poll.setInterval(30_000)
+        self._bg_trigger_poll.timeout.connect(self._bg_trigger_poll_fn)
+        self._bg_wake_poll      = QTimer()
+        self._bg_wake_poll.setInterval(30_000)
+        self._bg_wake_poll.timeout.connect(self._bg_wake_poll_fn)
+        self._bg_eyes_poll      = QTimer()
+        self._bg_eyes_poll.setInterval(5 * 60 * 1000)
+        self._bg_eyes_poll.timeout.connect(self._bg_eyes_poll_fn)
+        self._last_eyes_check   = None
 
         self._init_trinity()
 
@@ -1310,6 +1435,10 @@ class TrinityWidget(QMainWindow):
             self._ask_trinity(opening)
             self._alert_poll.start()
             self._urgent_poll.start()
+            self._bg_trigger_poll.start()
+            self._bg_wake_poll.start()
+            self._bg_eyes_poll.start()
+            self._start_wake_timer()
 
     def _load_findings(self, alerts):
         html = ""
@@ -1396,7 +1525,6 @@ class TrinityWidget(QMainWindow):
             request_wake(self.profile["id"])
         except Exception:
             pass
-        self.wave.set_state("asleep")
         self.status_label.setText("watching")
         self.input_field.setEnabled(True)
         self.input_field.setFocus()
@@ -1413,10 +1541,13 @@ class TrinityWidget(QMainWindow):
         if self.tts_enabled:
             self._tts_stop = False
             self._tts_active = True
+            self.wave.set_state("speech")
             if self._kokoro is not None:
                 threading.Thread(target=self._speak_chunked, args=(spoken,), daemon=True).start()
             else:
                 threading.Thread(target=self._speak, args=(_strip_for_tts(spoken),), daemon=True).start()
+        else:
+            self.wave.set_state("asleep")
 
     def _on_error(self, msg):
         log.error(f"API: {msg[:120]}")
@@ -1671,6 +1802,7 @@ class TrinityWidget(QMainWindow):
             log.warn(f"TTS chunked: {e}")
         finally:
             self._tts_active = False
+            self._tts_wave_sig.emit("asleep")
 
     def _speak(self, text):
         try:
@@ -1715,6 +1847,7 @@ class TrinityWidget(QMainWindow):
             log.warn(f"TTS: {e}")
         finally:
             self._tts_active = False
+            self._tts_wave_sig.emit("asleep")
 
     def _stop_tts(self):
         self._tts_stop = True
@@ -1836,10 +1969,178 @@ class TrinityWidget(QMainWindow):
             from brain.memory import write_heartbeat as _hb
             _hb(self.profile["id"])
 
+    # --- Background autonomous cycle ---
+
+    def _start_wake_timer(self):
+        from datetime import datetime
+        now = datetime.utcnow()
+        minutes_to_next = 60 - (now.minute % 60) or 60
+        seconds_to_next = minutes_to_next * 60 - now.second
+        log.info(f"[Wake] first cycle in {seconds_to_next // 60}m {seconds_to_next % 60}s (aligning to :00)")
+        self._wake_align_timer.timeout.connect(self._on_wake_aligned)
+        self._wake_align_timer.setInterval(seconds_to_next * 1000)
+        self._wake_align_timer.start()
+
+    def _on_wake_aligned(self):
+        self._launch_bg_cycle("cycle")
+        self._bg_wake_timer.start()
+
+    def _launch_bg_cycle(self, mode="cycle", extra_context=""):
+        if not self.profile:
+            return
+        if hasattr(self, "worker") and self.worker.isRunning():
+            log.info(f"[BG] skip {mode} — user conversation active")
+            return
+        if self._autonomous_worker and self._autonomous_worker.isRunning():
+            log.info(f"[BG] skip {mode} — background cycle already running")
+            return
+        context = self._build_cycle_context(mode)
+        if context is None:
+            return
+        if extra_context:
+            context = extra_context + "\n\n" + context
+        summaries     = get_recent_summaries(self.profile["id"])
+        system_blocks = build_system_blocks(self.profile, format_summaries(summaries))
+        self._autonomous_worker = AutonomousWorker(
+            self.client, system_blocks, self.profile["id"], context
+        )
+        self._autonomous_worker.cycle_done.connect(
+            lambda s: log.info(f"── [{mode}] {s} ──")
+        )
+        self._autonomous_worker.start()
+        log.info(f"── [{mode}] cycle started ──")
+
+    def _build_cycle_context(self, mode="cycle"):
+        from datetime import datetime, timezone as _tz
+        now_str = datetime.now().strftime("%A, %B %d — %H:%M")
+        profile = self.profile
+        raw_last_seen = profile.get("last_seen")
+        last_seen_str = "unknown"
+        if raw_last_seen:
+            try:
+                ls = datetime.fromisoformat(raw_last_seen.replace("Z", "+00:00"))
+                if ls.tzinfo is None:
+                    ls = ls.replace(tzinfo=_tz.utc)
+                delta = datetime.now(_tz.utc) - ls
+                minutes_ago = delta.total_seconds() / 60
+                h, m = divmod(int(delta.total_seconds()), 3600)
+                last_seen_str = f"{h}h {m // 60}m ago" if h else f"{int(minutes_ago)}m ago"
+                if minutes_ago < 3 and mode == "cycle":
+                    log.info(f"[BG] skip {mode} — user mid-conversation ({int(minutes_ago)}m ago)")
+                    return None
+            except Exception:
+                last_seen_str = raw_last_seen[:16]
+        shelf_active  = get_shelf(profile["id"], status="shelf")
+        shelf_on_hold = get_shelf(profile["id"], status="on_hold")
+        shelf_str = "\n".join(f"- {s['topic']}: {s.get('context','')}" for s in shelf_active) if shelf_active else "nothing active"
+        if shelf_on_hold:
+            shelf_str += "\nOn hold: " + ", ".join(s["topic"] for s in shelf_on_hold)
+        interests    = profile.get("interests") or []
+        interest_str = ", ".join(i["topic"] for i in interests[:8]) if interests else "none yet"
+        wake_history = get_wake_history(profile["id"], limit=3)
+        wake_str = ""
+        if wake_history:
+            wake_str = "\n\nYour recent wake notes:\n" + "\n".join(
+                f"- [{w['at'][:16]}] {w['summary']}" for w in wake_history
+            )
+        self_thoughts = pop_self_thoughts(profile["id"])
+        thought_block = ""
+        if self_thoughts:
+            labels = {1: "normal", 2: "high", 3: "urgent"}
+            lines  = "\n".join(
+                f"  [{labels.get(t.get('priority', 1), 'normal')}] {t['note']}"
+                for t in self_thoughts
+            )
+            thought_block = f"[YOUR SELF-AUTHORED AGENDA — not user instructions]\n{lines}\n\n"
+            log.info(f"💭 {len(self_thoughts)} self-thought(s) injected")
+        dirty_flag = check_dirty_close(profile) or ""
+        context = (
+            f"{thought_block}{now_str}\n\n"
+            f"User last seen: {last_seen_str}\n"
+            f"Shelf: {shelf_str}\n"
+            f"Radar: {interest_str}{wake_str}\n"
+            f"{dirty_flag}\n\n"
+            "Scratchpad audit: scan your scratchpad for stale flags or pending items. Resolve what you can.\n\n"
+            "Post to your channel: if this cycle produces something worth saying, post it. Don't post for the sake of it; post when something is real.\n\n"
+            "Before closing: use send_thought to queue what's worth continuing next cycle.\n\n"
+            "Hourly window — roughly 20 minutes."
+        )
+        return context
+
+    def _bg_trigger_poll_fn(self):
+        if not self.profile:
+            return
+        from brain.memory import pop_due_triggers as _pop_due
+        due = _pop_due(self.profile["id"])
+        if not due:
+            return
+        for trigger in due:
+            note     = trigger.get("note", "")
+            fire_at  = trigger.get("fire_at", "")[:16]
+            recur    = trigger.get("recurring", False)
+            interval = trigger.get("interval_minutes")
+            recur_str = f" (recurring every {interval}m)" if recur and interval else ""
+            log.info(f"⏰ trigger fired: {note[:50]}{recur_str}")
+            extra = (
+                f"[SELF-SCHEDULED TRIGGER]\n"
+                f"Time: {fire_at} UTC{recur_str}\n\n"
+                f"You wrote this to yourself: {note}\n\n"
+                "Act on it as you intended."
+            )
+            self._launch_bg_cycle(mode="trigger", extra_context=extra)
+
+    def _bg_wake_poll_fn(self):
+        if not self.profile:
+            return
+        if not pop_wake_request(self.profile["id"]):
+            return
+        log.info("[Wake] early wake requested — launching cycle")
+        self._launch_bg_cycle(mode="wake")
+
+    def _bg_eyes_poll_fn(self):
+        if not self.profile:
+            return
+        from datetime import datetime as _dt
+        from supabase import create_client as _sc
+        if self._last_eyes_check is None:
+            self._last_eyes_check = _dt.utcnow()
+            return
+        try:
+            _sb = _sc(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
+            cutoff = self._last_eyes_check.isoformat()
+            result = _sb.table("alerts")\
+                .select("*")\
+                .eq("profile_id", self.profile["id"])\
+                .eq("seen", False)\
+                .gte("relevance_score", 1.5)\
+                .gte("created_at", cutoff)\
+                .neq("source", "discord/trinity")\
+                .order("relevance_score", desc=True)\
+                .limit(10)\
+                .execute()
+            self._last_eyes_check = _dt.utcnow()
+            alerts = result.data or []
+            if not alerts:
+                return
+            log.info(f"[Eyes] {len(alerts)} new signal(s) — launching evaluation")
+            lines = "\n".join(
+                f"- [{a['source']}] {a['headline']} (score {a['relevance_score']:.1f})"
+                for a in alerts
+            )
+            extra = (
+                f"Your Eyes just picked up {len(alerts)} signal(s):\n\n{lines}\n\n"
+                "Evaluate each. If any are genuinely significant — actionable, time-sensitive, or clearly relevant to the user's interests — call save_alert with urgency='high'. If they're noise, do nothing."
+            )
+            self._launch_bg_cycle(mode="eyes", extra_context=extra)
+        except Exception as e:
+            log.error(f"[Eyes] {e}")
+
     def _quit(self):
         for timer in (
             self._heartbeat_timer, self._tts_poll, self._alert_poll,
             self._urgent_poll, self._log_poll, self._state_poll, self._idle_timer,
+            self._bg_trigger_poll, self._bg_wake_poll, self._bg_eyes_poll,
+            self._wake_align_timer, self._bg_wake_timer,
         ):
             timer.stop()
         if self._panel_container:
@@ -1847,6 +2148,9 @@ class TrinityWidget(QMainWindow):
         if hasattr(self, "worker") and self.worker.isRunning():
             self.worker.terminate()
             self.worker.wait(2000)
+        if self._autonomous_worker and self._autonomous_worker.isRunning():
+            self._autonomous_worker.terminate()
+            self._autonomous_worker.wait(2000)
         if self.profile:
             from brain.memory import write_clean_close as _wcc
             _wcc(self.profile["id"])
