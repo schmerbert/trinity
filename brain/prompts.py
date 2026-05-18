@@ -166,21 +166,6 @@ def build_system_blocks(profile, summary_text, recent_messages=None, discord_mod
         f"Recent conversation summaries:\n{summary_text}"
     )
 
-    scratchpad_raw = (profile.get("scratchpad_text") or "").strip()
-    if scratchpad_raw:
-        try:
-            scratchpad_data = json.loads(scratchpad_raw)
-            if isinstance(scratchpad_data, dict):
-                sections_text = "\n\n".join(
-                    f"[{k}]\n{v}" for k, v in scratchpad_data.items() if v
-                )
-                if sections_text:
-                    dynamic += f"\n\nScratchpad:\n{sections_text}"
-            else:
-                dynamic += f"\n\nScratchpad:\n{scratchpad_raw}"
-        except (json.JSONDecodeError, TypeError):
-            dynamic += f"\n\nScratchpad:\n{scratchpad_raw}"
-
     shelf = profile.get("shelf") or []
     if shelf:
         shelf_lines = "\n".join(
