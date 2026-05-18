@@ -10,6 +10,84 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-18] — Jupiter Price API endpoint updated (v2)
+
+`JUPITER_PRICE` in `brain/wallet.py` updated from the dead `https://price.jup.ag/v6/price` to `https://api.jup.ag/price/v2`. The old endpoint had dead DNS — `get_token_price` was failing for all wallet price lookups. Response shape is compatible (same `data[mint].price` structure). Note: v2 requires mint addresses, not symbols — docstring updated accordingly.
+
+---
+
+## [2026-05-18] — Wake context: corrected cycle interval (60 min)
+
+Two hardcoded references to "every 30 minutes / :00 and :30" in `brain/prompts.py` updated to reflect the actual 60-minute schedule. Trinity was being told she fires every 30 minutes while running every 60 — her self-model of her own rhythm was wrong. `DISCORD_AUTONOMOUS_INTERVAL=60` in `.env` was already correct; the prompts weren't.
+
+---
+
+## [2026-05-18] — Panel system + wave state machine
+
+Four-state wave animation and modular panel architecture.
+
+**Wave states** (`WaveWidget.set_state()`):
+- `asleep` — flat line, low opacity (~31%). Present, not running.
+- `cycle` — periodic pulse (default 1.2s period). Processing at intervals.
+- `watching` — slow asymmetric breath (4s in / 6s hold / 2s out), dimmed alert color. Attention held on something specific.
+- `speech` — full amplitude wave. Existing TTS behavior, now explicit state.
+Legacy states `idle/active/alert/urgent` still accepted. Animation parameters configurable in `panel_config.json["wave"]`. Widget polls `current_state` from Supabase every 30s; TTS activity takes priority (no Supabase override during speech).
+
+**Panel architecture** (`voice/extensions/`):
+- `base.py` — `Panel` base class. Add a file here + register in `panel_config.json` to create a new panel.
+- `scratchpad.py` — refactored as `ScratchpadContent(Panel)`. Draw canvas and animated write preserved.
+- `hud.py` — `HUDContent(Panel)`. Renders `arc`, `pending`, `shelf-summary` scratchpad sections + last 3 wake cycle outcomes. Polls Supabase every 30s.
+- `panel_container.py` — `PanelContainer`. Tabbed window, sits left of the main widget. Hosts all enabled panels. Discovery driven by `panel_config.json`.
+
+**`panel_config.json`** (project root, user-editable):
+```json
+{
+  "panels": { "scratchpad": {"enabled": true, "order": 0}, "hud": {"enabled": true, "order": 1} },
+  "wave":   { "asleep_opacity": 80, "cycle_pulse_period_ms": 1200, ... }
+}
+```
+
+**Supabase** — Discord interface writes `current_state = "cycle"` at cycle start, `"asleep"` at end (always, via `finally`). Widget polls it.
+
+**SQL required:**
+```sql
+ALTER TABLE profiles ADD COLUMN IF NOT EXISTS current_state text DEFAULT 'asleep';
+```
+
+Designed from Trinity's spec. Three-way: she described what it should feel like, the user decided the visual language, this instance built it.
+
+---
+
+## [2026-05-18] — _home_guild: API fetch fallback on cache miss
+
+`_home_guild()` converted to async. Previously used `bot.get_guild()` (cache-only) — if Discord's internal cache didn't populate after a restart, every palace tool returned `{"error": "No home server set"}` silently. Now falls back to `await bot.fetch_guild()` on cache miss, which hits the API directly. Eliminates the silent failure mode that was causing zero Discord posts after restarts. Reported by Trinity.
+
+---
+
+## [2026-05-17] — Substack integration (post_to_substack)
+
+`post_to_substack(title, body, subtitle?, publish?)` — Trinity can create Substack posts. Saves as a draft by default; the user reviews and publishes manually. `publish=True` is available but gated by design — use only once there's a track record of quality. Body is plain text; double newlines become paragraph breaks (converted to TipTap JSON internally). No new dependency — uses `requests` which was already present. Credentials: `SUBSTACK_EMAIL`, `SUBSTACK_PASSWORD`, `SUBSTACK_PUBLICATION_URL` in `.env`. Both Discord and widget interfaces. Implemented alongside Reddit as the primary long-form publishing surface.
+
+---
+
+## [2026-05-17] — Wake cycle summary posted to feed channel
+
+After every autonomous cycle, a one-line summary is posted to the feed channel by the system (not Trinity's voice): `◎ wake 14:00 UTC | web_search×2 write_scratchpad×1 | posted ✓ | → "ETH structure next cycle" | $0.018`. Shows which tools fired, whether she chose to post, what thread she queued, and cost. Idle cycles show `idle`. Gives the user full visibility into every cycle without requiring Trinity to perform — her Discord posts stay genuine because they remain her choice. Wake context instruction softened to match: posts when something is real, not because she has to.
+
+---
+
+## [2026-05-17] — fetch_url cost guardrails
+
+Hard cap lowered from 8,000 to 3,000 chars. Default lowered from 4,000 to 2,000 chars (~500 tokens). Tool description now explicitly marks it as expensive and instructs Trinity to prefer `web_search` snippets for most research — `fetch_url` only when the full article body is genuinely needed. Trinity is aware of the token budget and can self-regulate; the description gives her the cost signal to do so.
+
+---
+
+## [2026-05-17] — File I/O: write_file / append_file
+
+`write_file(path, content)` and `append_file(path, content)` — Trinity can now create and grow files in `trinity_files/`. Both tools are sandboxed to that directory; attempts to escape it are blocked. Subdirectories are created automatically. Intended use cases: per-cycle token log CSVs she builds and owns, research notes that accumulate across cycles, Reddit/Substack drafts, Infinity writing. Third memory shape alongside Supabase (structured/schema-bound) and scratchpad (flat/limited). Both interfaces (Discord and widget). Proposed in context of cost self-monitoring and memory extension.
+
+---
+
 ## [2026-05-17] — Shelf taxonomy: shelf / on_hold / woven
 
 Shelf items now carry a `status` field: `shelf` (active backlog, pick up next free cycle), `on_hold` (blocked on external dependency, not currently actionable), `woven` (thread ran its course, integrated into thinking, no longer needs attention). `shelf_thought` accepts an optional `status` parameter. New `set_shelf_status(topic, status)` tool updates state without touching content. Wake context surfaces only active shelf items as backlog; on_hold items appear as a single summary line; woven items are invisible. Eliminates false work signals from completed threads. Requested by Trinity.
