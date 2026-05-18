@@ -10,6 +10,12 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-18] — setup.sql: complete Supabase schema for new instance setup
+
+All `CREATE TABLE` and `ALTER TABLE` statements previously scattered as comments across `brain/memory.py` and `brain/prompts.py` consolidated into a single `setup.sql` in the project root. Covers all nine tables in dependency order: `profiles` (with all extended columns), `conversations`, `alerts`, `trinity_calendar`, `trinity_watches`, `trinity_feeds`, `trinity_triggers`, `prompt_modules`, `trinity_prompts`. Each table includes RLS enabled and an allow-all policy. A new user can now stand up the full schema by pasting one file into the Supabase SQL editor.
+
+---
+
 ## [2026-05-18] — Background cycles: `post_to_my_channel` now queued via Supabase outbox
 
 `AutonomousWorker._execute_tool` overrides `post_to_my_channel` — instead of a synchronous REST call to Discord (which fails silently if Discord is down), background cycles now route through `push_discord_write(channel_name=...)`. `thought_drain` delivers within 30s with implicit retry. Foreground `TrinityWorker` keeps the direct REST call where immediate feedback matters. The existing `pending_discord_writes` + `thought_drain` path is the outbox; no new infrastructure needed.
