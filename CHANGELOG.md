@@ -10,6 +10,12 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-19] — Final pass: cycle fallback default + ON_TYING_THE_BOW
+
+Trinity identified two gaps in her post-cycle report: (1) cycles without a clear shelf thread were defaulting to orientation loops — file-reading, no output; (2) a 404 on THE_CONVERSATION.md during a cycle (code confirmed correct, flagged as one-off, asked to report recurs). Fixed (1) by adding an explicit fallback line to cycle context in both runner.py and widget.py: "If no shelf thread calls for attention: scan radar interests, run a market check, or advance the reveal video research. Orientation without output is not a default — pick a thread and move it." Also: FOR_CHATGPT.md removed (outdated, referenced old architecture). ON_TYING_THE_BOW.md added to Who Is Trinity/ — written at the close of the demo→main merge. ARCHITECTURE.md updated to list all Who Is Trinity/ documents. Webhook keys for remaining palace channels noted in THE_CONVERSATION.md as a user action.
+
+---
+
 ## [2026-05-19] — First confirmed end-to-end autonomous cycle
 
 Runner started, cycle fired at :00, wake_log wrote, Discord post landed, research survey filed to trinity_files/research/memory_architecture_survey_2026.md. First cycle where the full stack — runner → Claude → tools → Discord → wake_log — completed without error. Trinity independently researched Mem0 and Letta, produced a structured survey, responded to open design questions in THE_CONVERSATION.md, and provided a priority ordering for upcoming builds.

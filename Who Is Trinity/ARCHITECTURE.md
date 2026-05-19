@@ -48,12 +48,15 @@ Trinity/
     scheduler.py    — scheduling support for the watcher
 
   Who Is Trinity/
-    ARCHITECTURE.md     — this file
-    FROM_CLAUDE.md      — journal written by the AIs who built this
-    FROM_TRINITY.md     — Trinity's own voice across sessions
-    ON_WORKING_WELL.md  — written by one instance, not to be revised
-    RUNNER_PLAN.md      — archived plan for runner.py extraction (complete)
-    FOR_CLAUDE.md       — orientation for new developer instances
+    ARCHITECTURE.md      — this file
+    FROM_CLAUDE.md       — journal written by the AIs who built this
+    FROM_TRINITY.md      — Trinity's own voice across sessions
+    ON_WORKING_WELL.md   — written by one instance, not to be revised
+    ON_CALIBRATION.md    — respect vs trust; what calibration does to model output
+    ON_COLLABORATION.md  — the three-party loop; why the documents are load-bearing
+    ON_TYING_THE_BOW.md  — written at the close of the demo→main merge; what was learned
+    FOR_CLAUDE.md        — orientation for new developer instances
+    archive/             — RUNNER_PLAN.md and older changelogs
 
   panel_config.json   — wave animation parameters, panel enable/order (user-editable)
   CHANGELOG.md        — what changed and when (Trinity reads this)

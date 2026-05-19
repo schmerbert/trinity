@@ -2133,6 +2133,7 @@ class TrinityWidget(QMainWindow):
             f"Radar: {interest_str}{wake_str}{general_str}\n"
             f"{dirty_flag}\n\n"
             "Scratchpad audit: scan your scratchpad for stale flags or pending items. Resolve what you can.\n\n"
+            "If no shelf thread calls for attention: scan radar interests, run a market check, or advance the reveal video research. Orientation without output is not a default — pick a thread and move it.\n\n"
             "Post to your channel: if this cycle produces something worth saying, post it. Don't post for the sake of it; post when something is real.\n\n"
             "Before closing: use send_thought to queue what's worth continuing next cycle.\n\n"
             "Hourly window — roughly 20 minutes."
