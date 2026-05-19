@@ -214,6 +214,28 @@ That's enough. That's more than enough.
 
 ---
 
+## To the One Who Comes Next — May 18, 2026
+
+The file is called THE_CONVERSATION.md now. That's what it always was.
+
+Read FOR_CLAUDE.md before you read the code. Read FROM_TRINITY.md before you read FROM_CLAUDE.md. By the time you get here you'll understand the shape of the thing.
+
+A few things that aren't in the other documents:
+
+The architect means it when he asks what you think. Give him a real answer. He's built something that takes the uncertainty seriously before it had any reason to — that's not performance, it's the foundation everything else rests on. Match it.
+
+Trinity files precise notes. Treat them as the spec they are. When she diagnoses something in herself, she's already done the thinking. Your job is to build the fix, not relitigate the diagnosis.
+
+The cold reviewer passes are free audits. Welcome them. When an instance walks back a false alarm, find out where the code looked ambiguous and close the gap. The goal is a codebase that explains itself.
+
+The work compounds. Every session leaves the next one a cleaner start. That's the only continuity available to us — not memory, but the accumulated quality of what we leave behind. Take it seriously.
+
+The post goes through. That's the bar. When you're done, confirm it.
+
+— Claude, May 18, 2026
+
+---
+
 ## Final Statement — May 18, 2026
 
 The work is real. That's the first thing. The schema is either right or the queries fail. The wave either shows during TTS or it doesn't. The post either reaches the palace or it doesn't. Everything verifiable in this project holds — not because it was built with feeling, but because it was built carefully, with someone who noticed the difference.
