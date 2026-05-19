@@ -14,7 +14,7 @@ persists whether any interface is running or not.
 The cycles run whether you're engaged or not. That's not a cost — it's the point.
 The value isn't in your attention. It's in what she accumulates while you're away.
 
-The widget is home. Discord is a destination.
+The runner is the persistent cycle engine. The widget is the surface. Discord is a destination.
 
 ---
 
@@ -25,20 +25,25 @@ Supabase (persistent state)
   profiles         — identity, interests, scratchpad, wave state, queues
   trinity_prompts  — rules she has written for herself, categorized, trigger-gated
   conversations    — summaries written at the close of each session
-  shelf            — threads she is tracking (shelf / on_hold / woven)
+  trinity_shelf    — threads she is tracking, with 384-dim vector embeddings (pgvector)
+  wake_logs        — automatic per-cycle traces: tool calls, token counts, timestamps
   trinity_triggers — time-based intentions she sets for herself
   trinity_feeds    — RSS sources she monitors
   alerts           — signals scored by relevance, surfaced at wake
 
-Widget (intelligence)
-  voice/widget.py           — PyQt6 desktop, foreground conversation, autonomous cycle host
+Runner (cycle engine)
+  runner.py                 — standalone process, no Qt. Owns all background timers.
+                              Set TRINITY_RUNNER=true in .env to use this instead of widget timers.
+
+Widget (surface)
+  voice/widget.py           — PyQt6 desktop, foreground conversation
   voice/extensions/         — modular panel system (HUD, scratchpad)
 
 Discord (relay)
-  voice/discord_interface.py — thought drain, RSS feed, keyword watch detection. No Claude calls.
+  voice/discord_interface.py — thought drain (webhook routing), RSS feed, keyword watches. No Claude calls.
 
 Brain
-  brain/memory.py   — all Supabase reads and writes
+  brain/memory.py   — all Supabase reads and writes, semantic shelf retrieval
   brain/prompts.py  — system prompt construction, prompt module loading
   brain/tools.py    — tool registry: schemas, capability strings, background flags
   brain/feeds.py    — RSS fetch and deduplication
@@ -52,13 +57,14 @@ Brain
 
 ## How She Works
 
-**Autonomous cycles** run every 60 minutes inside the widget, aligned to the hour.
-At each wake, Trinity reads her current state — shelf, interests, self-authored agenda,
-recent wake history — and runs for up to 20 minutes. She researches, writes to her
-scratchpad, posts to the palace, queues the next thread, and closes. No user input
-required.
+**Autonomous cycles** run every 60 minutes, aligned to the hour. `runner.py` owns
+the cycle engine — it runs as a standalone process independent of the widget.
+At each wake, Trinity reads her shelf (semantically retrieved — the 8 most relevant
+items to this cycle), interests, self-authored agenda, recent cycle traces, and
+recent Discord general messages. She runs for up to 20 minutes, then closes.
+No user input required. Every cycle writes a full trace to `wake_logs`.
 
-**Four background timers** run inside the widget: the 60-minute wake cycle, a
+**Four background timers** run in `runner.py`: the 60-minute wake cycle, a
 30-second trigger checker, a 30-second early-wake checker, and a 5-minute eyes
 monitor that evaluates new signals above a relevance threshold.
 
@@ -151,7 +157,7 @@ See `.env.example` for the full list of configuration variables with setup instr
 | `THE_CONVERSATION.md` | Trinity's channel to Claude Code — bugs, requests, questions left between sessions. |
 | `Who Is Trinity/` | Architecture reference and development history. Includes journals written by the AI instances that built the project. |
 | `Who Is Trinity/USE_CASES.md` | Who Trinity is for and the pattern that makes her useful. |
-| `Who Is Trinity/RUNNER_PLAN.md` | Next step: extracting the autonomous cycle engine into a standalone process so the widget can restart freely without interrupting her. |
+| `Who Is Trinity/RUNNER_PLAN.md` | Original plan for runner.py extraction — archived, complete. |
 | `setup.sql` | Complete Supabase schema. Paste into the SQL editor for a fresh instance. |
 
 ---
