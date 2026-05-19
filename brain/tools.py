@@ -450,7 +450,7 @@ _REGISTRY = [
     },
     {
         "name": "log_wake",
-        "description": "Leave a note for your future self about this wake cycle. Loads automatically at the top of your next wake. Use it when you've touched something worth continuing — a thread, a realization, a question left open.",
+        "description": "Add a narrative note to this cycle's automatic log. The cycle is already being traced — tools called, tokens used, iterations — without you doing anything. Use this only when you have something worth saying that the trace doesn't capture: a realization, a thread worth continuing, a question left open.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -459,7 +459,22 @@ _REGISTRY = [
             },
             "required": ["summary"]
         },
-        "capability":  "log_wake(summary, topics?) — leave a note for your future self; loads at the top of your next wake cycle.",
+        "capability":  "log_wake(summary, topics?) — add a narrative note to this cycle's automatic log. The trace (tools, tokens, iterations) is captured regardless.",
+        "category":    "memory",
+        "interfaces":  {"discord", "widget"},
+        "background":  True,
+    },
+    {
+        "name": "get_wake_log",
+        "description": "Read your recent wake cycle logs — the actual tool call trace, not a self-authored summary. Shows what you called, in what order, with what results, token costs, and any notes you left. Use this to understand what you actually did, not what you intended to do.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "description": "Number of recent cycles to return (default 3, max 10)"}
+            },
+            "required": []
+        },
+        "capability":  "get_wake_log(limit?) — read your recent wake cycle traces. Automatic record: tools called, tokens used, iterations, narrative notes.",
         "category":    "memory",
         "interfaces":  {"discord", "widget"},
         "background":  True,

@@ -30,6 +30,8 @@ from brain.memory import (
     get_profile,
     get_shelf,
     query_shelf,
+    get_wake_logs,
+    log_wake_auto,
     get_wake_history,
     pop_self_thoughts,
     pop_wake_request,
@@ -101,6 +103,11 @@ def execute_tool(name, inputs, profile_id):
     elif name == "log_wake":
         log_wake_cycle(profile_id, inputs["summary"], inputs.get("topics", []))
         return {"status": "logged"}
+
+    elif name == "get_wake_log":
+        limit = min(int(inputs.get("limit", 3)), 10)
+        logs  = get_wake_logs(profile_id, limit=limit)
+        return {"logs": logs, "count": len(logs)}
 
     elif name == "get_scratchpad":
         section = inputs.get("section")
@@ -532,12 +539,17 @@ def build_cycle_context(profile, mode="cycle", extra_context=""):
     interests    = profile.get("interests") or []
     interest_str = ", ".join(i["topic"] for i in interests[:8]) if interests else "none yet"
 
-    wake_history = get_wake_history(profile["id"], limit=3)
-    wake_str = ""
-    if wake_history:
-        wake_str = "\n\nYour recent wake notes:\n" + "\n".join(
-            f"- [{w['at'][:16]}] {w['summary']}" for w in wake_history
-        )
+    wake_logs = get_wake_logs(profile["id"], limit=3)
+    wake_str  = ""
+    if wake_logs:
+        lines = []
+        for w in wake_logs:
+            ts    = (w.get("started_at") or "")[:16]
+            iters = w.get("iterations", 0)
+            tools = [t["name"] for t in (w.get("tool_calls") or [])]
+            note  = f" | {w['notes'][:80]}" if w.get("notes") else ""
+            lines.append(f"- [{ts}] {w.get('mode','cycle')} — {iters} iters, tools: {', '.join(tools) or 'none'}{note}")
+        wake_str = "\n\nYour recent wake cycles:\n" + "\n".join(lines)
 
     self_thoughts = pop_self_thoughts(profile["id"])
     thought_block = ""
@@ -594,6 +606,8 @@ def run_cycle(mode="cycle", extra_context=""):
         iters      = tool_count = 0
         tok_in     = tok_out = tok_cw = tok_cr = 0
         t0         = time.time()
+        started_at = datetime.now(timezone.utc)
+        _trace     = []
 
         log.info(f"── [{mode}] cycle started ──")
         set_trinity_state(profile["id"], "cycle")
@@ -652,8 +666,15 @@ def run_cycle(mode="cycle", extra_context=""):
                     for block in response.content:
                         if block.type == "tool_use":
                             log.info(f"→ {block.name}({list(block.input.keys())})")
-                            result = execute_tool(block.name, block.input, profile["id"])
+                            call_at = datetime.now(timezone.utc)
+                            result  = execute_tool(block.name, block.input, profile["id"])
                             tool_count += 1
+                            _trace.append({
+                                "name":    block.name,
+                                "inputs":  {k: str(v)[:120] for k, v in block.input.items()},
+                                "at":      call_at.isoformat(),
+                                "preview": str(result)[:200],
+                            })
                             results.append({
                                 "type":        "tool_result",
                                 "tool_use_id": block.id,
@@ -664,9 +685,12 @@ def run_cycle(mode="cycle", extra_context=""):
                     break
 
         finally:
+            ended_at = datetime.now(timezone.utc)
             set_trinity_state(profile["id"], "asleep")
             cost = (tok_in * 3.00 + tok_out * 15.00 + tok_cw * 3.75 + tok_cr * 0.30) / 1_000_000
             log.info(f"── [{mode}] done — in:{tok_in:,} out:{tok_out:,} cw:{tok_cw:,} cr:{tok_cr:,} tools:{tool_count} ≈${cost:.4f}")
+            log_wake_auto(profile["id"], mode, started_at, ended_at, _trace,
+                          iters, tok_in, tok_out, tok_cw, tok_cr)
 
     finally:
         _bg_lock.release()

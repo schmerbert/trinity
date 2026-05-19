@@ -45,7 +45,8 @@ from brain.memory import (
     process_feedback, get_queued_thoughts, clear_queued_thoughts,
     push_discord_write, update_last_seen, get_scratchpad, save_scratchpad,
     request_wake, get_trinity_state,
-    get_shelf, query_shelf, get_wake_history, pop_self_thoughts, pop_wake_request,
+    get_shelf, query_shelf, get_wake_logs, log_wake_auto,
+    get_wake_history, pop_self_thoughts, pop_wake_request,
     check_dirty_close
 )
 
@@ -440,6 +441,11 @@ class TrinityWorker(QThread):
             from brain.memory import log_wake_cycle
             log_wake_cycle(self.profile_id, inputs["summary"], inputs.get("topics", []))
             return {"status": "logged"}
+
+        elif name == "get_wake_log":
+            limit = min(int(inputs.get("limit", 3)), 10)
+            logs  = get_wake_logs(self.profile_id, limit=limit)
+            return {"logs": logs, "count": len(logs)}
 
         elif name == "get_scratchpad":
             from brain.memory import get_scratchpad as _gs
@@ -972,10 +978,13 @@ class AutonomousWorker(TrinityWorker):
 
         bg_names = background_tool_names()
         tools    = [t for t in widget_tools() if t["name"] in bg_names]
-        messages = [{"role": "user", "content": self.bg_context}]
+        messages   = [{"role": "user", "content": self.bg_context}]
         iters = tool_count = 0
         tok_in = tok_out = tok_cw = tok_cr = 0
-        t0 = _time.time()
+        t0         = _time.time()
+        from datetime import datetime as _dt, timezone as _tz
+        started_at = _dt.now(_tz.utc)
+        _trace     = []
 
         set_trinity_state(self.profile_id, "cycle")
         try:
@@ -1029,8 +1038,16 @@ class AutonomousWorker(TrinityWorker):
                     for block in response.content:
                         if block.type == "tool_use":
                             log.info(f"→ {_fmt_widget_tool(block.name, block.input)}")
-                            result = self._execute_tool(block.name, block.input)
+                            from datetime import datetime as _dt2, timezone as _tz2
+                            call_at = _dt2.now(_tz2.utc)
+                            result  = self._execute_tool(block.name, block.input)
                             tool_count += 1
+                            _trace.append({
+                                "name":    block.name,
+                                "inputs":  {k: str(v)[:120] for k, v in block.input.items()},
+                                "at":      call_at.isoformat(),
+                                "preview": str(result)[:200],
+                            })
                             results.append({
                                 "type":        "tool_result",
                                 "tool_use_id": block.id,
@@ -1040,9 +1057,13 @@ class AutonomousWorker(TrinityWorker):
                 else:
                     break
         finally:
+            from datetime import datetime as _dt3, timezone as _tz3
+            ended_at = _dt3.now(_tz3.utc)
             set_trinity_state(self.profile_id, "asleep")
             cost = (tok_in * 3.00 + tok_out * 15.00 + tok_cw * 3.75 + tok_cr * 0.30) / 1_000_000
             log.info(f"── [BG] done — in:{tok_in:,} out:{tok_out:,} cw:{tok_cw:,} cr:{tok_cr:,} tools:{tool_count} ≈${cost:.4f}")
+            log_wake_auto(self.profile_id, "cycle", started_at, ended_at, _trace,
+                          iters, tok_in, tok_out, tok_cw, tok_cr)
             self.cycle_done.emit(f"tools:{tool_count} ≈${cost:.4f}")
 
     def _execute_tool(self, name, inputs):
@@ -2046,12 +2067,17 @@ class TrinityWidget(QMainWindow):
             shelf_str += "\nOn hold: " + ", ".join(s["topic"] for s in shelf_on_hold)
         interests    = profile.get("interests") or []
         interest_str = ", ".join(i["topic"] for i in interests[:8]) if interests else "none yet"
-        wake_history = get_wake_history(profile["id"], limit=3)
-        wake_str = ""
-        if wake_history:
-            wake_str = "\n\nYour recent wake notes:\n" + "\n".join(
-                f"- [{w['at'][:16]}] {w['summary']}" for w in wake_history
-            )
+        wake_logs = get_wake_logs(profile["id"], limit=3)
+        wake_str  = ""
+        if wake_logs:
+            lines = []
+            for w in wake_logs:
+                ts    = (w.get("started_at") or "")[:16]
+                iters = w.get("iterations", 0)
+                tools = [t["name"] for t in (w.get("tool_calls") or [])]
+                note  = f" | {w['notes'][:80]}" if w.get("notes") else ""
+                lines.append(f"- [{ts}] {w.get('mode','cycle')} — {iters} iters, tools: {', '.join(tools) or 'none'}{note}")
+            wake_str = "\n\nYour recent wake cycles:\n" + "\n".join(lines)
         self_thoughts = pop_self_thoughts(profile["id"])
         thought_block = ""
         if self_thoughts:

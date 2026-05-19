@@ -288,25 +288,72 @@ def pop_discord_writes(profile_id):
         update_profile(profile_id, {"pending_discord_writes": []})
     return writes
 
-# ─── Wake cycle log — Trinity's notes to her future self ─────────────────────
+# ─── Wake cycle logs — automatic structured trace ────────────────────────────
 #
-# alter table profiles add column if not exists wake_history jsonb default '[]';
+# See setup_wake_logs.sql — run once in Supabase SQL editor.
 #
+def log_wake_auto(profile_id, mode, started_at, ended_at, tool_calls,
+                  iterations, tokens_in=0, tokens_out=0, tokens_cw=0, tokens_cr=0):
+    """Called automatically at end of every cycle. No Trinity input required."""
+    try:
+        supabase.table("wake_logs").insert({
+            "profile_id":         str(profile_id),
+            "mode":               mode,
+            "started_at":         started_at.isoformat() if hasattr(started_at, "isoformat") else started_at,
+            "ended_at":           ended_at.isoformat() if hasattr(ended_at, "isoformat") else ended_at,
+            "tool_calls":         tool_calls,
+            "iterations":         iterations,
+            "tokens_in":          tokens_in,
+            "tokens_out":         tokens_out,
+            "tokens_cache_write": tokens_cw,
+            "tokens_cache_read":  tokens_cr,
+        }).execute()
+    except Exception as e:
+        print(f"[wake_log] failed to write: {e}")
+
+def get_wake_logs(profile_id, limit=5):
+    """Return recent wake cycle logs with full tool call traces."""
+    try:
+        result = supabase.table("wake_logs")\
+            .select("id, mode, started_at, ended_at, tool_calls, iterations, tokens_in, tokens_out, notes")\
+            .eq("profile_id", str(profile_id))\
+            .order("started_at", desc=True)\
+            .limit(limit)\
+            .execute()
+        return result.data or []
+    except Exception:
+        return []
+
 def log_wake_cycle(profile_id, summary, topics=None):
-    from datetime import datetime
-    profile = get_profile()
-    history = profile.get("wake_history") or []
-    history.append({
-        "at":      datetime.utcnow().isoformat(),
-        "summary": summary,
-        "topics":  topics or []
-    })
-    return update_profile(profile_id, {"wake_history": history[-10:]})
+    """Trinity-callable. Adds a narrative note to the most recent wake log."""
+    try:
+        result = supabase.table("wake_logs")\
+            .select("id")\
+            .eq("profile_id", str(profile_id))\
+            .order("started_at", desc=True)\
+            .limit(1)\
+            .execute()
+        if result.data:
+            supabase.table("wake_logs")\
+                .update({"notes": summary})\
+                .eq("id", result.data[0]["id"])\
+                .execute()
+            return {"status": "noted"}
+    except Exception:
+        pass
+    return {"status": "no log to annotate"}
 
 def get_wake_history(profile_id, limit=3):
-    profile = get_profile()
-    history = profile.get("wake_history") or []
-    return history[-limit:]
+    """Backward-compat shim — returns condensed view of recent wake_logs."""
+    logs = get_wake_logs(profile_id, limit=limit)
+    return [
+        {
+            "at":      w.get("started_at", ""),
+            "summary": w.get("notes") or f"{w.get('iterations', 0)} iterations, {len(w.get('tool_calls') or [])} tool calls",
+            "topics":  [t["name"] for t in (w.get("tool_calls") or [])]
+        }
+        for w in logs
+    ]
 
 # ─── Post-conversation wake request ──────────────────────────────────────────
 #

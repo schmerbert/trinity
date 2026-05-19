@@ -10,6 +10,21 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-19] — Automatic wake cycle tracing
+
+Every cycle now writes a structured log automatically — no self-reporting required from Trinity.
+
+**What changed:**
+- `setup_wake_logs.sql` — new `wake_logs` table with full per-cycle trace: mode, start/end time, tool call sequence (name, inputs, result preview, timestamp), iterations, token counts (in/out/cache), and an optional Trinity-authored notes field.
+- `brain/memory.py` — `log_wake_auto()` called at the end of every cycle by the engine itself. `get_wake_logs()` returns structured logs. `log_wake_cycle()` (Trinity's tool) now writes to the `notes` field of the most recent log rather than the JSONB profile column. `get_wake_history()` updated to be a backward-compat shim over `get_wake_logs`.
+- `brain/tools.py` — `log_wake` description updated to reflect that the trace is automatic; `get_wake_log` tool added so Trinity can read her own cycle history with full tool call detail.
+- `runner.py` and `voice/widget.py` — agentic loops instrumented: each tool call appends a trace entry; `log_wake_auto` called in the `finally` block so the log always writes even on timeout or error.
+- `build_cycle_context` / `_build_cycle_context` — wake history now shows actual tool call sequences from `wake_logs` rather than self-authored summaries.
+
+**Why:** Trinity was spending tokens summarising what she just did. The engine already knows — it called every tool. The log is now ground truth, not a self-report. Her `log_wake` tool remains for narrative notes when she has something worth saying beyond the trace.
+
+---
+
 ## [2026-05-19] — Security: search_shelf search path and rls_auto_enable lockdown
 
 Two Supabase security linter warnings addressed. `setup_security_fixes.sql` added — run once in Supabase SQL editor. Fixes: (1) `search_shelf` function search path locked to `public`, preventing search path manipulation attacks; (2) anon and authenticated roles revoked from executing `rls_auto_enable`, which was unnecessarily exposed via the public REST API. RLS `USING (true)` policies left as-is — intentional for a single-user project, not a real vulnerability in this threat model. Prompt injection defense added to ROADMAP as a future item with priority notes tied to wallet capability milestones.
