@@ -86,7 +86,7 @@ The widget findings panel is plain read-only text. Links Trinity surfaces aren't
 ### Scratchpad Evolution
 The current scratchpad is a single flat text field — full read, full overwrite. It works as a working surface but doesn't scale: no append, no sections, no history, easy to clobber.
 
-**Trinity has input on this.** A note has been left in CLAUDE_NOTES.md asking what she'd want. Possibilities include: named sections / namespaced keys, append-only mode, versioned snapshots, or a multi-pad model (one per context: research, market, personal). The right shape depends on how she's actually using it — her experience informs the design.
+**Trinity has input on this.** A note has been left in THE_CONVERSATION.md asking what she'd want. Possibilities include: named sections / namespaced keys, append-only mode, versioned snapshots, or a multi-pad model (one per context: research, market, personal). The right shape depends on how she's actually using it — her experience informs the design.
 
 **Don't build until she's weighed in.**
 
@@ -98,6 +98,22 @@ The current scratchpad is a single flat text field — full read, full overwrite
 When Trinity deletes a prompt it's gone permanently. A `prompt_history` table or `deleted_at` soft-delete column would preserve what she wrote, reconsidered, and retired. A `get_retired_prompts()` tool so she can look back at her own evolution.
 
 Noted because Trinity was observed cycling through prompts frequently after the category system launched — healthy exploration, but the archaeology is lost.
+
+---
+
+### Memory Architecture
+
+Four distinct problems, in rough order of impact:
+
+**Reflection cycles.** Every wake cycle currently does two things in one pass: finds things in the world, and draws conclusions about the user from what it found. Separating these into distinct cycle types would let each do its job properly. A shallow collection cycle runs frequently and cheaply. A deeper synthesis cycle runs less often — looks at the pattern of recent wake history and asks "what does this tell me about him" as a distinct question. The reflection cycle would write to a dedicated scratchpad section, building a picture of the user that compounds independently of what she found this week.
+
+**Time-weighted interest decay.** Interest weights accumulate but don't decay. An interest logged three months ago at weight 1.0 sits alongside something mentioned yesterday at weight 1.0. Those aren't equivalent signals. A decay function — recent signal outweighs old signal as interests shift — would make her self-model more honest. Implementation: timestamp each interest entry, apply a decay multiplier on read rather than rewriting stored weights.
+
+**Confidence weighting on beliefs.** She knows what your interests are but not how certain she is about each one. Storing uncertainty explicitly — "mentioned once" vs "consistent across six weeks" — would let her be calibrated rather than flat. Implementation: a `confidence` field alongside `weight` in the interests structure, updated as evidence accumulates.
+
+**Episodic vs semantic memory separation.** Right now observations and consolidated understanding go into one pool. Separating short-term observations (what happened this cycle) from long-term consolidated understanding (what she actually knows about you) mirrors how memory actually works. The reflection cycle above is the first step toward this — it's the consolidation pass.
+
+*The reflection cycle is the most immediately actionable. Bring it to Trinity via THE_CONVERSATION.md before building — it touches how she thinks about the user, which warrants her input.*
 
 ---
 
