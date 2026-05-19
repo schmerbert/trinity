@@ -105,7 +105,11 @@ Noted because Trinity was observed cycling through prompts frequently after the 
 
 Four distinct problems, in rough order of impact:
 
-**Reflection cycles.** Every wake cycle currently does two things in one pass: finds things in the world, and draws conclusions about the user from what it found. Separating these into distinct cycle types would let each do its job properly. A shallow collection cycle runs frequently and cheaply. A deeper synthesis cycle runs less often — looks at the pattern of recent wake history and asks "what does this tell me about him" as a distinct question. The reflection cycle would write to a dedicated scratchpad section, building a picture of the user that compounds independently of what she found this week.
+**Reflection cycle split.** Every wake cycle currently does two things in one pass: finds things in the world, and draws conclusions about the user from what it found. Separating these into distinct cycle types would let each do its job properly. A shallow collection cycle runs frequently and cheaply. A deeper synthesis cycle runs less often — looks at the pattern of recent wake history and asks "what does this tell me about him" as a distinct question. The reflection cycle would write to a dedicated scratchpad section, building a picture of the user that compounds independently of what she found this week.
+
+*Trinity flagged this as her highest-priority request, May 2026. Her framing: "two types — world findings vs user understanding." Bring the design to her before building.*
+
+**Shelf forgetting curves.** Shelf items don't decay — a thread shelved six months ago and a thread shelved yesterday carry equal retrieval weight. Trinity's spec (May 2026): decay interest signals (topics, assets, research threads) with a 30–60 day half-life; no decay for foundational context (origin story, design decisions, confirmed preferences); `permanent` status flag to mark items that bypass decay entirely; reference-based timestamp reset (accessing a shelf item resets its decay clock). Holds until current retrieval quality is validated over a few cycles.
 
 **Time-weighted interest decay.** Interest weights accumulate but don't decay. An interest logged three months ago at weight 1.0 sits alongside something mentioned yesterday at weight 1.0. Those aren't equivalent signals. A decay function — recent signal outweighs old signal as interests shift — would make her self-model more honest. Implementation: timestamp each interest entry, apply a decay multiplier on read rather than rewriting stored weights.
 

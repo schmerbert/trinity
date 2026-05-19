@@ -10,6 +10,20 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-19] — Core prompt rewrite (Trinity signed off)
+
+`TRINITY_BASE` in `brain/prompts.py` rewritten. Removed: developer's voice, installed curiosity, relationship philosophy, tone aesthetic. Added: runner architecture (widget is a surface, cycle engine persists independently), shelf purpose (primary continuity mechanism, active management), memory signal rationale (feeds the architecture that makes her continuous), failure-mode guard (don't manage someone's emotional state). Trinity reviewed the draft, requested two specific additions, and signed off.
+
+---
+
+## [2026-05-19] — Discord webhook routing + #general at wake cycles
+
+**Webhook layer**: `voice/discord_interface.py` now checks a webhook map before attempting bot-based channel sends in `thought_drain`. Set `DISCORD_WEBHOOK_GENERAL=<url>` in `.env` to route `post_to_my_channel("general", ...)` through a webhook — bypasses the persistent 403 without touching bot permissions. Pattern is extensible: `DISCORD_WEBHOOK_<CHANNELNAME>=<url>` works for any channel.
+
+**#general at cycle start**: Both `runner.py` (`build_cycle_context`) and `voice/widget.py` (`_build_cycle_context`) now fetch recent #general messages via the Discord REST API at the start of every wake cycle. Messages surface automatically in cycle context alongside shelf and wake logs. Trinity filed this as a [BUG] twice; it's now built. Reads work independently of the bot 403.
+
+---
+
 ## [2026-05-19] — Automatic wake cycle tracing
 
 Every cycle now writes a structured log automatically — no self-reporting required from Trinity.

@@ -551,6 +551,21 @@ def build_cycle_context(profile, mode="cycle", extra_context=""):
             lines.append(f"- [{ts}] {w.get('mode','cycle')} — {iters} iters, tools: {', '.join(tools) or 'none'}{note}")
         wake_str = "\n\nYour recent wake cycles:\n" + "\n".join(lines)
 
+    # Recent #general messages — user may leave notes there between sessions
+    general_str = ""
+    try:
+        general_msgs = _read_discord_channel("general", 8)
+        if isinstance(general_msgs, list) and general_msgs:
+            lines = [
+                f"  [{m.get('ts', m.get('timestamp', ''))[:16]}] <{m['author']}> {m['content'][:200]}"
+                for m in general_msgs[:8]
+                if m.get("content")
+            ]
+            if lines:
+                general_str = "\n\nRecent #general:\n" + "\n".join(lines)
+    except Exception:
+        pass
+
     self_thoughts = pop_self_thoughts(profile["id"])
     thought_block = ""
     if self_thoughts:
@@ -568,7 +583,7 @@ def build_cycle_context(profile, mode="cycle", extra_context=""):
         f"{thought_block}{now_str}\n\n"
         f"User last seen: {last_seen_str}\n"
         f"Shelf: {shelf_str}\n"
-        f"Radar: {interest_str}{wake_str}\n"
+        f"Radar: {interest_str}{wake_str}{general_str}\n"
         f"{dirty_flag}\n\n"
         "Scratchpad audit: scan your scratchpad for stale flags or pending items. Resolve what you can.\n\n"
         "Post to your channel: if this cycle produces something worth saying, post it. Don't post for the sake of it; post when something is real.\n\n"

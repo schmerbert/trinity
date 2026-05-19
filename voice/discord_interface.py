@@ -52,6 +52,14 @@ _THOUGHT_CHANNEL_ID = int(os.getenv("TRINITY_THOUGHT_CHANNEL_ID", "0") or "0")
 _FEED_CHANNEL_ID    = int(os.getenv("TRINITY_FEED_CHANNEL_ID",    "0") or "0")
 _HOME_GUILD_ID_ENV  = os.getenv("DISCORD_HOME_GUILD_ID", "")
 
+# Webhook map: DISCORD_WEBHOOK_CHANNELNAME=url → {"channel-name": "url"}
+# Used in thought_drain to bypass bot send_messages permission.
+_WEBHOOKS: dict[str, str] = {
+    k[len("DISCORD_WEBHOOK_"):].lower().replace("_", "-"): v
+    for k, v in os.environ.items()
+    if k.startswith("DISCORD_WEBHOOK_") and v
+}
+
 intents = discord.Intents.default()
 intents.message_content = True
 bot = discord.Client(intents=intents)
@@ -325,7 +333,24 @@ async def thought_drain():
     for w in writes:
         channel_name = w.get("channel_name")
         if channel_name:
-            # Route to named channel in home guild
+            # Webhook first — bypasses bot send_messages permission
+            wh_key = channel_name.lower().replace(" ", "-").replace("_", "-")
+            wh_url = _WEBHOOKS.get(wh_key) or next(
+                (url for key, url in _WEBHOOKS.items() if key.replace("-", "") == wh_key.replace("-", "")),
+                None
+            )
+            if wh_url:
+                try:
+                    import aiohttp as _aio
+                    async with _aio.ClientSession() as _s:
+                        wh = discord.Webhook.from_url(wh_url, session=_s)
+                        await wh.send(w["content"][:2000])
+                    log.info(f"thought_drain webhook → #{channel_name}")
+                    await asyncio.sleep(0.3)
+                    continue
+                except Exception as e:
+                    log.warning(f"thought_drain webhook failed for #{channel_name}: {e}")
+            # Fall back: route to named channel in home guild via bot
             try:
                 guild = bot.guilds[0] if bot.guilds else None
                 if guild:

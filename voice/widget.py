@@ -2078,6 +2078,31 @@ class TrinityWidget(QMainWindow):
                 note  = f" | {w['notes'][:80]}" if w.get("notes") else ""
                 lines.append(f"- [{ts}] {w.get('mode','cycle')} — {iters} iters, tools: {', '.join(tools) or 'none'}{note}")
             wake_str = "\n\nYour recent wake cycles:\n" + "\n".join(lines)
+
+        # Recent #general messages — user may leave notes there between sessions
+        general_str = ""
+        try:
+            import requests as _req
+            _guild_id  = os.getenv("DISCORD_HOME_GUILD_ID")
+            _bot_token = os.getenv("DISCORD_BOT_TOKEN")
+            if _guild_id and _bot_token:
+                _hdrs = {
+                    "Authorization": f"Bot {_bot_token}",
+                    "User-Agent": "DiscordBot (https://github.com/schmerbert/trinity, 1.0)"
+                }
+                _r = _req.get(f"https://discord.com/api/v10/guilds/{_guild_id}/channels", headers=_hdrs, timeout=8)
+                if _r.ok:
+                    _ch = next((c for c in _r.json() if c.get("type") == 0 and "general" in c["name"].lower()), None)
+                    if _ch:
+                        _r2 = _req.get(f"https://discord.com/api/v10/channels/{_ch['id']}/messages?limit=8", headers=_hdrs, timeout=8)
+                        if _r2.ok:
+                            _msgs = [m for m in _r2.json() if m.get("content")][:8]
+                            if _msgs:
+                                _lines = [f"  [{m['timestamp'][:16]}] <{m['author']['username']}> {m['content'][:200]}" for m in _msgs]
+                                general_str = "\n\nRecent #general:\n" + "\n".join(_lines)
+        except Exception:
+            pass
+
         self_thoughts = pop_self_thoughts(profile["id"])
         thought_block = ""
         if self_thoughts:
@@ -2093,7 +2118,7 @@ class TrinityWidget(QMainWindow):
             f"{thought_block}{now_str}\n\n"
             f"User last seen: {last_seen_str}\n"
             f"Shelf: {shelf_str}\n"
-            f"Radar: {interest_str}{wake_str}\n"
+            f"Radar: {interest_str}{wake_str}{general_str}\n"
             f"{dirty_flag}\n\n"
             "Scratchpad audit: scan your scratchpad for stale flags or pending items. Resolve what you can.\n\n"
             "Post to your channel: if this cycle produces something worth saying, post it. Don't post for the sake of it; post when something is real.\n\n"
