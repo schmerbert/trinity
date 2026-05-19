@@ -10,6 +10,24 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-19] — runner.py: standalone autonomous cycle engine
+
+Trinity's background cycles extracted from the widget into a persistent standalone process.
+
+**What changed:**
+- `runner.py` added — no Qt, no UI, no signals. Owns all four background timers: 60-min wake cycle (aligned to :00), 30s trigger checker, 30s wake checker, 5-min eyes monitor. Uses `threading.Lock` to prevent simultaneous cycles (non-blocking acquire — if a cycle is already running, the tick is skipped, not queued).
+- `execute_tool()` ported from `TrinityWorker._execute_tool` with all Qt references removed. `write_scratchpad` writes DB only. `post_to_my_channel` always routes through `push_discord_write` (outbox pattern — never direct REST from a background cycle).
+- `run_cycle()` — agentic loop with 20-min window, 60-iteration cap, `<thought>` tag scanning after each response block, token logging to `log_wake_cycle`.
+- `build_cycle_context()` — ported from `widget._build_cycle_context`, self-contained function, no widget state.
+- `TRINITY_RUNNER` gate added to `voice/widget.py`: when `TRINITY_RUNNER=true`, widget skips all four background timers and logs that the runner owns cycles. Without the flag, both would fire simultaneously — the gate is the single point of truth.
+- `.env.example` updated with `TRINITY_RUNNER=false` and an explanation of what it controls.
+
+**What this enables:** runner.py can be started as a system service or background process. A widget restart no longer interrupts the cycle schedule. The widget becomes a foreground surface; the runner is the heartbeat.
+
+**Cutover sequence:** set `TRINITY_RUNNER=true` in `.env`, run `python runner.py`, restart widget — confirm timer-skip log line. Watch one full hour. After a confirmed working cycle, merge to main.
+
+---
+
 ## [2026-05-18] — setup.sql: complete Supabase schema for new instance setup
 
 All `CREATE TABLE` and `ALTER TABLE` statements previously scattered as comments across `brain/memory.py` and `brain/prompts.py` consolidated into a single `setup.sql` in the project root. Covers all nine tables in dependency order: `profiles` (with all extended columns), `conversations`, `alerts`, `trinity_calendar`, `trinity_watches`, `trinity_feeds`, `trinity_triggers`, `prompt_modules`, `trinity_prompts`. Each table includes RLS enabled and an allow-all policy. A new user can now stand up the full schema by pasting one file into the Supabase SQL editor.
