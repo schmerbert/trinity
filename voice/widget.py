@@ -1435,10 +1435,13 @@ class TrinityWidget(QMainWindow):
             self._ask_trinity(opening)
             self._alert_poll.start()
             self._urgent_poll.start()
-            self._bg_trigger_poll.start()
-            self._bg_wake_poll.start()
-            self._bg_eyes_poll.start()
-            self._start_wake_timer()
+            if not os.getenv("TRINITY_RUNNER", "").lower() in ("true", "1"):
+                self._bg_trigger_poll.start()
+                self._bg_wake_poll.start()
+                self._bg_eyes_poll.start()
+                self._start_wake_timer()
+            else:
+                log.info("[Widget] TRINITY_RUNNER=true — background cycles owned by runner.py")
 
     def _load_findings(self, alerts):
         html = ""
