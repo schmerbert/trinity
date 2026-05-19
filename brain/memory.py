@@ -14,6 +14,7 @@ load_dotenv(dotenv_path=env_path)
 supabase = create_client(os.getenv("SUPABASE_URL"), os.getenv("SUPABASE_KEY"))
 
 def get_profile():
+    # Single-user system — always returns the one profile row.
     result = supabase.table("profiles").select("*").execute()
     if result.data:
         return result.data[0]
