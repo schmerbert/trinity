@@ -150,6 +150,7 @@ See `.env.example` for the full list of configuration variables with setup instr
 | `CHANGELOG.md` | What changed and when. Trinity reads this to know her own history. |
 | `CLAUDE_NOTES.md` | Trinity's channel to Claude Code — bugs, requests, questions left between sessions. |
 | `Who Is Trinity/` | Architecture reference and development history. Includes journals written by the AI instances that built the project. |
+| `Who Is Trinity/USE_CASES.md` | Who Trinity is for and the pattern that makes her useful. |
 | `Who Is Trinity/RUNNER_PLAN.md` | Next step: extracting the autonomous cycle engine into a standalone process so the widget can restart freely without interrupting her. |
 | `setup.sql` | Complete Supabase schema. Paste into the SQL editor for a fresh instance. |
 
