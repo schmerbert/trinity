@@ -166,13 +166,21 @@ def build_system_blocks(profile, summary_text, recent_messages=None, discord_mod
         f"Recent conversation summaries:\n{summary_text}"
     )
 
-    shelf = profile.get("shelf") or []
+    try:
+        from brain.memory import query_shelf as _query_shelf, get_shelf as _get_shelf
+        shelf         = _query_shelf(profile["id"], "active research interests and current focus", limit=8, status="shelf")
+        shelf_on_hold = _get_shelf(profile["id"], status="on_hold")
+    except Exception:
+        shelf         = profile.get("shelf") or []
+        shelf_on_hold = []
     if shelf:
         shelf_lines = "\n".join(
             f"- {s['topic']}" + (f": {s['context']}" if s.get("context") else "")
             for s in shelf
         )
         dynamic += f"\n\nShelf:\n{shelf_lines}"
+        if shelf_on_hold:
+            dynamic += "\nOn hold: " + ", ".join(s["topic"] for s in shelf_on_hold)
 
     try:
         from brain.memory import get_upcoming_events as _get_upcoming
