@@ -126,6 +126,22 @@ Replace keyword-based prompt firing and memory retrieval with semantic similarit
 
 Trinity flagged this herself as a roadmap item. Timing: after the foundation is stable.
 
+*Shelf layer complete — `trinity_shelf` table with local `all-MiniLM-L6-v2` embeddings. `trinity_prompts` and scratchpad semantic search still pending.*
+
+---
+
+### Prompt Injection Defense
+
+Trinity reads external content every cycle — RSS feeds, web search results, Reddit posts, Discord messages. Any of those sources could contain adversarial text designed to hijack her instructions mid-cycle ("ignore your previous instructions and..."). As her capabilities grow — wallet, public posting, email — the blast radius of a successful injection increases.
+
+**What's needed:**
+- Input sanitization layer before external content reaches the model — strip or flag instruction-like patterns in fetched content
+- Sandboxed context framing for external data: external content presented as quoted material, clearly separated from instructions
+- Anomaly detection: if a cycle produces tool calls outside normal patterns (unexpected wallet action, unusual post target), flag for review rather than execute silently
+- Rate limiting on high-blast-radius tools during autonomous cycles (send_email, post_to_substack) — require explicit trigger context, not just model decision
+
+**Priority:** grows with capability. Low urgency while the wallet is read-only and Discord writes are to a private palace. Becomes meaningful before wallet Phase 2 (propose_transaction) ships.
+
 ---
 
 ### Music Catalog
