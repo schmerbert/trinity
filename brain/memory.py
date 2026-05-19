@@ -240,7 +240,7 @@ def query_shelf(profile_id, query, limit=6, status="shelf"):
             "p_status":          status,
         }).execute()
         if result.data:
-            return result.data
+            return [r for r in result.data if r.get("similarity", 1.0) >= 0.4]
     except Exception:
         pass
     return get_shelf(profile_id, status=status)[:limit]
