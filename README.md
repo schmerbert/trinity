@@ -11,6 +11,9 @@ Her identity lives in Supabase — interests, a research shelf, self-authored be
 rules, conversation history, time-based intentions she sets for herself. That state
 persists whether any interface is running or not.
 
+The cycles run whether you're engaged or not. That's not a cost — it's the point.
+The value isn't in your attention. It's in what she accumulates while you're away.
+
 The widget is home. Discord is a destination.
 
 ---
