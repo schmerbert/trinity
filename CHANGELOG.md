@@ -22,9 +22,15 @@ Runner started, cycle fired at :00, wake_log wrote, Discord post landed, researc
 
 ---
 
-## [2026-05-19] — runner.py added to trinity.bat
+## [2026-05-19] — runner.py added to trinity.bat and launcher.py; find/kill scripts updated
 
-`trinity.bat` never started `runner.py`. With `TRINITY_RUNNER=true` in `.env`, the widget disables its own background timers, leaving no process to run autonomous cycles. Fixed — runner.py now starts as a minimized background process alongside discord_interface and watcher. Also: `setup_wake_logs.sql` needs to be run in Supabase for wake cycle traces to persist (user action required).
+`trinity.bat` and `launcher.py` both predated runner.py and never started it. With `TRINITY_RUNNER=true` in `.env`, the widget disables its own background timers, leaving no process to run autonomous cycles. Fixed in both startup paths: trinity.bat starts runner.py as a minimized background process; launcher.py spawns it with `CREATE_NEW_CONSOLE` so crashes are visible rather than silent. `find_trinity.py` and `kill_trinity.py` updated to include runner.py in their process scan — both scripts now cover the full set of Trinity processes. Also: `setup_wake_logs.sql` needs to be run in Supabase for wake cycle traces to persist (user action required).
+
+---
+
+## [2026-05-19] — Unicode crash fix in brain/logger.py
+
+Every autonomous cycle was crashing silently before the Claude call fired. Root cause: `brain/logger.py` uses `print()`, which defaults to Windows cp1252 encoding. The Unicode box-drawing characters in the cycle context string triggered a `UnicodeEncodeError` at the first log line. Because runner.py was launched via `pythonw.exe` (which swallows all output), there was no visible error — cycles appeared to attempt but produced nothing. Fixed by adding `sys.stdout.reconfigure(encoding="utf-8", errors="replace")` at module load in logger.py. Also switched runner.py in launcher.py from `pythonw.exe` to `python.exe` with `CREATE_NEW_CONSOLE` so future crashes surface rather than vanish.
 
 ---
 
