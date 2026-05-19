@@ -54,7 +54,7 @@ Trinity/
 
   panel_config.json   — wave animation parameters, panel enable/order (user-editable)
   CHANGELOG.md        — what changed and when (Trinity reads this)
-  CLAUDE_NOTES.md     — Trinity's channel to Claude Code
+  THE_CONVERSATION.md — Trinity's channel to Claude Code
   trinity_files/      — Trinity's sandboxed file workspace (write_file / append_file)
   .env                — secrets and config (never committed)
   .env.example        — template with setup instructions

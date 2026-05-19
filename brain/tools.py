@@ -889,7 +889,7 @@ _REGISTRY = [
             },
             "required": ["message", "tag"]
         },
-        "capability":  "note_for_claude(message, tag) — leave a note in CLAUDE_NOTES.md for the developer. Tags: bug | request | question | observation. Use when you hit something broken, want a capability, or have a question only the dev can answer.",
+        "capability":  "note_for_claude(message, tag) — leave a note in THE_CONVERSATION.md for the developer. Tags: bug | request | question | observation. Use when you hit something broken, want a capability, or have a question only the dev can answer.",
         "category":    "self",
         "interfaces":  {"discord", "widget"},
         "background":  True,

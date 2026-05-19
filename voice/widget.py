@@ -545,7 +545,7 @@ class TrinityWorker(QThread):
         elif name == "note_for_claude":
             try:
                 import datetime as _dt
-                notes_path = Path(__file__).parent.parent / "CLAUDE_NOTES.md"
+                notes_path = Path(__file__).parent.parent / "THE_CONVERSATION.md"
                 msg = inputs['message'].strip()
                 try:
                     existing = notes_path.read_text(encoding="utf-8")
