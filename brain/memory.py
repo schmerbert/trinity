@@ -7,6 +7,20 @@ import json
 from supabase import create_client
 from dotenv import load_dotenv
 
+# ─── Embedder (lazy — loads all-MiniLM-L6-v2 on first call, then cached) ─────
+_embedder = None
+
+def _get_embedder():
+    global _embedder
+    if _embedder is None:
+        from sentence_transformers import SentenceTransformer
+        _embedder = SentenceTransformer("all-MiniLM-L6-v2")
+    return _embedder
+
+def embed(text: str) -> list:
+    """384-dim embedding. Model downloads ~80MB on first call, then loads from cache."""
+    return _get_embedder().encode(text, normalize_embeddings=True).tolist()
+
 from pathlib import Path
 env_path = Path(__file__).parent.parent / '.env'
 load_dotenv(dotenv_path=env_path)
@@ -143,13 +157,25 @@ def process_feedback(profile_id, topic, feedback):
 
     return update_profile(profile_id, {"interests": interests})
 
-# ─── Shelf — topics Trinity wants to explore further ─────────────────────────
+# ─── Shelf — trinity_shelf table (vector-searchable) ─────────────────────────
 #
-# alter table profiles add column if not exists shelf jsonb default '[]';
+# See setup_pgvector.sql — run that first, then scripts/migrate_shelf.py.
+# Falls back to JSONB profiles.shelf if the table doesn't exist yet.
 #
 def get_shelf(profile_id, status=None):
-    """Return shelf items. status filter: 'shelf' | 'on_hold' | 'woven' | None (all).
-    Items without a status field are treated as 'shelf' (backward-compat)."""
+    """Return shelf items from trinity_shelf table. Falls back to JSONB if not migrated."""
+    try:
+        q = supabase.table("trinity_shelf")\
+            .select("topic, context, status, added_at")\
+            .eq("profile_id", str(profile_id))
+        if status is not None:
+            q = q.eq("status", status)
+        result = q.order("added_at", desc=False).execute()
+        if result.data is not None:
+            return result.data
+    except Exception:
+        pass
+    # Fallback: JSONB in profiles (pre-migration)
     profile = get_profile()
     items = profile.get("shelf") or []
     if status is not None:
@@ -158,24 +184,66 @@ def get_shelf(profile_id, status=None):
 
 def add_to_shelf(profile_id, topic, context="", status="shelf"):
     from datetime import datetime
-    shelf = get_shelf(profile_id)
-    shelf = [s for s in shelf if s.get("topic", "").lower() != topic.lower()]
-    shelf.append({"topic": topic, "context": context, "status": status, "added_at": datetime.utcnow().isoformat()})
-    return update_profile(profile_id, {"shelf": shelf})
+    vec = embed(f"{topic}: {context}" if context else topic)
+    try:
+        # Delete any existing entry with same topic (case-insensitive) before inserting
+        supabase.table("trinity_shelf")\
+            .delete()\
+            .eq("profile_id", str(profile_id))\
+            .ilike("topic", topic)\
+            .execute()
+        supabase.table("trinity_shelf").insert({
+            "profile_id": str(profile_id),
+            "topic":      topic,
+            "context":    context,
+            "status":     status,
+            "embedding":  vec,
+            "added_at":   datetime.utcnow().isoformat(),
+            "updated_at": datetime.utcnow().isoformat(),
+        }).execute()
+        return {"status": "added", "topic": topic}
+    except Exception as e:
+        return {"error": str(e)}
 
 def set_shelf_status(profile_id, topic, status):
-    """Update the status of an existing shelf item: 'shelf' | 'on_hold' | 'woven'."""
-    shelf = get_shelf(profile_id)
-    for item in shelf:
-        if item.get("topic", "").lower() == topic.lower():
-            item["status"] = status
-            break
-    return update_profile(profile_id, {"shelf": shelf})
+    from datetime import datetime
+    try:
+        supabase.table("trinity_shelf")\
+            .update({"status": status, "updated_at": datetime.utcnow().isoformat()})\
+            .eq("profile_id", str(profile_id))\
+            .ilike("topic", topic)\
+            .execute()
+        return {"status": "updated", "topic": topic, "new_status": status}
+    except Exception as e:
+        return {"error": str(e)}
 
 def remove_from_shelf(profile_id, topic):
-    shelf = get_shelf(profile_id)
-    shelf = [s for s in shelf if s.get("topic", "").lower() != topic.lower()]
-    return update_profile(profile_id, {"shelf": shelf})
+    try:
+        supabase.table("trinity_shelf")\
+            .delete()\
+            .eq("profile_id", str(profile_id))\
+            .ilike("topic", topic)\
+            .execute()
+        return {"status": "removed", "topic": topic}
+    except Exception as e:
+        return {"error": str(e)}
+
+def query_shelf(profile_id, query, limit=6, status="shelf"):
+    """Semantic search over the shelf. Returns top-k items most relevant to query.
+    Requires setup_pgvector.sql to be run in Supabase. Falls back to full fetch."""
+    try:
+        vec = embed(query)
+        result = supabase.rpc("search_shelf", {
+            "p_profile_id":      str(profile_id),
+            "p_query_embedding": vec,
+            "p_match_count":     limit,
+            "p_status":          status,
+        }).execute()
+        if result.data:
+            return result.data
+    except Exception:
+        pass
+    return get_shelf(profile_id, status=status)[:limit]
 
 # ─── Queued thoughts — things Trinity wants to surface when user is around ────
 #

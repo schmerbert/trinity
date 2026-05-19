@@ -29,6 +29,7 @@ import anthropic
 from brain.memory import (
     get_profile,
     get_shelf,
+    query_shelf,
     get_wake_history,
     pop_self_thoughts,
     pop_wake_request,
@@ -129,6 +130,11 @@ def execute_tool(name, inputs, profile_id):
     elif name == "clear_shelf_item":
         remove_from_shelf(profile_id, inputs["topic"])
         return {"status": "cleared", "topic": inputs["topic"]}
+
+    elif name == "query_memory":
+        limit   = min(int(inputs.get("limit", 5)), 10)
+        results = query_shelf(profile_id, inputs["query"], limit=limit)
+        return {"results": results, "count": len(results)}
 
     elif name == "save_alert":
         profile = get_profile()
@@ -494,7 +500,7 @@ def _read_discord_channel(name_query, limit=20):
 
 # ─── Cycle context ────────────────────────────────────────────────────────────
 
-def build_cycle_context(profile, mode="cycle"):
+def build_cycle_context(profile, mode="cycle", extra_context=""):
     now_str       = datetime.now().strftime("%A, %B %d — %H:%M")
     raw_last_seen = profile.get("last_seen")
     last_seen_str = "unknown"
@@ -514,7 +520,10 @@ def build_cycle_context(profile, mode="cycle"):
         except Exception:
             last_seen_str = raw_last_seen[:16]
 
-    shelf_active  = get_shelf(profile["id"], status="shelf")
+    # Semantic retrieval: pull most relevant shelf items for this cycle.
+    # extra_context (trigger note, wake reason) is the best query when present.
+    shelf_query   = extra_context if extra_context else f"active research monitoring priorities {mode}"
+    shelf_active  = query_shelf(profile["id"], shelf_query, limit=8, status="shelf")
     shelf_on_hold = get_shelf(profile["id"], status="on_hold")
     shelf_str = "\n".join(f"- {s['topic']}: {s.get('context','')}" for s in shelf_active) if shelf_active else "nothing active"
     if shelf_on_hold:
@@ -569,7 +578,7 @@ def run_cycle(mode="cycle", extra_context=""):
             log.error("No profile — skipping cycle")
             return
 
-        context = build_cycle_context(profile, mode)
+        context = build_cycle_context(profile, mode, extra_context)
         if context is None:
             return
         if extra_context:

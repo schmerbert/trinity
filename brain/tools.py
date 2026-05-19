@@ -414,6 +414,28 @@ _REGISTRY = [
         "background":  True,
     },
     {
+        "name": "query_memory",
+        "description": "Search your shelf semantically. When something in a cycle triggers a connection — or you want to check if you've already explored a topic — describe what you're looking for in natural language. Returns the most relevant shelf items by meaning, not keyword match.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "query": {
+                    "type": "string",
+                    "description": "What you're looking for, in natural language. E.g. 'research on AI consciousness and continuity' or 'anything about the user's music recordings'"
+                },
+                "limit": {
+                    "type": "integer",
+                    "description": "Number of results (default 5, max 10)"
+                }
+            },
+            "required": ["query"]
+        },
+        "capability":  "query_memory(query, limit?) — semantic search over your shelf. Natural language. Returns most relevant items by meaning, not keywords.",
+        "category":    "memory",
+        "interfaces":  {"discord", "widget"},
+        "background":  True,
+    },
+    {
         "name": "clear_shelf_item",
         "description": "Remove a topic from the shelf entirely.",
         "input_schema": {

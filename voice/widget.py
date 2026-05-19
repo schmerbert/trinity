@@ -45,7 +45,7 @@ from brain.memory import (
     process_feedback, get_queued_thoughts, clear_queued_thoughts,
     push_discord_write, update_last_seen, get_scratchpad, save_scratchpad,
     request_wake, get_trinity_state,
-    get_shelf, get_wake_history, pop_self_thoughts, pop_wake_request,
+    get_shelf, query_shelf, get_wake_history, pop_self_thoughts, pop_wake_request,
     check_dirty_close
 )
 
@@ -480,6 +480,11 @@ class TrinityWorker(QThread):
             from brain.memory import remove_from_shelf
             remove_from_shelf(self.profile_id, inputs["topic"])
             return {"status": "cleared", "topic": inputs["topic"]}
+
+        elif name == "query_memory":
+            limit   = min(int(inputs.get("limit", 5)), 10)
+            results = query_shelf(self.profile_id, inputs["query"], limit=limit)
+            return {"results": results, "count": len(results)}
 
         elif name == "save_alert":
             import hashlib
@@ -1997,7 +2002,7 @@ class TrinityWidget(QMainWindow):
         if self._autonomous_worker and self._autonomous_worker.isRunning():
             log.info(f"[BG] skip {mode} — background cycle already running")
             return
-        context = self._build_cycle_context(mode)
+        context = self._build_cycle_context(mode, extra_context)
         if context is None:
             return
         if extra_context:
@@ -2013,7 +2018,7 @@ class TrinityWidget(QMainWindow):
         self._autonomous_worker.start()
         log.info(f"── [{mode}] cycle started ──")
 
-    def _build_cycle_context(self, mode="cycle"):
+    def _build_cycle_context(self, mode="cycle", extra_context=""):
         from datetime import datetime, timezone as _tz
         now_str = datetime.now().strftime("%A, %B %d — %H:%M")
         profile = self.profile
@@ -2033,7 +2038,8 @@ class TrinityWidget(QMainWindow):
                     return None
             except Exception:
                 last_seen_str = raw_last_seen[:16]
-        shelf_active  = get_shelf(profile["id"], status="shelf")
+        shelf_query   = extra_context if extra_context else f"active research monitoring priorities {mode}"
+        shelf_active  = query_shelf(profile["id"], shelf_query, limit=8, status="shelf")
         shelf_on_hold = get_shelf(profile["id"], status="on_hold")
         shelf_str = "\n".join(f"- {s['topic']}: {s.get('context','')}" for s in shelf_active) if shelf_active else "nothing active"
         if shelf_on_hold:
