@@ -16,4 +16,5 @@ timeout /t 1 /nobreak >nul
 
 start /min "" venv\Scripts\pythonw.exe nervous_system\watcher.py
 start /min "" venv\Scripts\pythonw.exe voice\discord_interface.py
+start /min "" venv\Scripts\python.exe runner.py
 python voice\widget.py

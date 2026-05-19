@@ -91,7 +91,8 @@ def _fmt_widget_tool(name: str, inputs: dict) -> str:
         "shelf_thought":     lambda i: i.get("topic", "")[:60],
         "write_prompt":      lambda i: f"{i.get('name','')} [{i.get('category','general')}]",
         "log_thought":       lambda i: f"[{i.get('category','')}] {i.get('content','')[:50]}",
-        "post_to_my_channel":lambda i: f"#{i.get('name','')} — {i.get('content','')[:40]}",
+        "post_to_my_channel":    lambda i: f"#{i.get('name','')} — {i.get('content','')[:40]}",
+        "schedule_discord_post": lambda i: f"#{i.get('name','')} @ {i.get('deliver_at','')[:16]} — {i.get('content','')[:30]}",
         "generate_image":    lambda i: i.get("prompt", "")[:60],
         "read_discord_channel": lambda i: f"#{i.get('name','')}",
         "write_scratchpad":  lambda i: i.get("content", "")[:60],
@@ -831,6 +832,12 @@ class TrinityWorker(QThread):
             except Exception as e:
                 return {"error": str(e)}
 
+        elif name == "schedule_discord_post":
+            from brain.memory import push_discord_write as _pdw
+            deliver_at = inputs.get("deliver_at")
+            _pdw(profile["id"] if profile else None, inputs["content"], channel_name=inputs.get("name"), deliver_at=deliver_at)
+            return {"status": "scheduled", "channel": inputs.get("name"), "deliver_at": deliver_at}
+
         elif name == "generate_image":
             try:
                 import urllib.parse, io
@@ -1076,6 +1083,11 @@ class AutonomousWorker(TrinityWorker):
             from brain.memory import push_discord_write as _pdw
             _pdw(self.profile_id, inputs["content"], channel_name=inputs.get("name"))
             return {"status": "queued", "channel": inputs.get("name"), "note": "delivered via thought_drain within 30s"}
+        if name == "schedule_discord_post":
+            from brain.memory import push_discord_write as _pdw
+            deliver_at = inputs.get("deliver_at")
+            _pdw(self.profile_id, inputs["content"], channel_name=inputs.get("name"), deliver_at=deliver_at)
+            return {"status": "scheduled", "channel": inputs.get("name"), "deliver_at": deliver_at}
         return super()._execute_tool(name, inputs)
 
 

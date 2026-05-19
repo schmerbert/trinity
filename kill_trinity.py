@@ -5,7 +5,7 @@ Or double-click (if .py files open with Python).
 """
 import subprocess
 
-TRINITY_SCRIPTS = ["widget.py", "discord_interface.py", "scraper.py", "launcher.py"]
+TRINITY_SCRIPTS = ["widget.py", "discord_interface.py", "scraper.py", "launcher.py", "runner.py"]
 
 
 def find_trinity():

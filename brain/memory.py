@@ -271,22 +271,43 @@ def update_last_seen(profile_id):
     from datetime import datetime
     return update_profile(profile_id, {"last_seen": datetime.utcnow().isoformat()})
 
-def push_discord_write(profile_id, content, channel_name=None):
+def push_discord_write(profile_id, content, channel_name=None, deliver_at=None):
     from datetime import datetime
     profile = get_profile()
     writes = profile.get("pending_discord_writes") or []
     entry = {"content": content, "at": datetime.utcnow().isoformat()}
     if channel_name:
         entry["channel_name"] = channel_name
+    if deliver_at:
+        entry["deliver_at"] = deliver_at
     writes.append(entry)
     return update_profile(profile_id, {"pending_discord_writes": writes})
 
 def pop_discord_writes(profile_id):
+    """Return entries whose deliver_at has passed (or is absent). Writes back any still-scheduled entries."""
+    from datetime import datetime, timezone
+    now = datetime.now(timezone.utc)
     profile = get_profile()
     writes = profile.get("pending_discord_writes") or []
-    if writes:
-        update_profile(profile_id, {"pending_discord_writes": []})
-    return writes
+    if not writes:
+        return []
+    due = []
+    pending = []
+    for w in writes:
+        deliver_at = w.get("deliver_at")
+        if deliver_at:
+            try:
+                dt = datetime.fromisoformat(deliver_at.replace("Z", "+00:00"))
+                if dt.tzinfo is None:
+                    dt = dt.replace(tzinfo=timezone.utc)
+                if dt > now:
+                    pending.append(w)
+                    continue
+            except Exception:
+                pass
+        due.append(w)
+    update_profile(profile_id, {"pending_discord_writes": pending})
+    return due
 
 # ─── Wake cycle logs — automatic structured trace ────────────────────────────
 #

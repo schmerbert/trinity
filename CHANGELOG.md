@@ -10,6 +10,30 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-19] — First confirmed end-to-end autonomous cycle
+
+Runner started, cycle fired at :00, wake_log wrote, Discord post landed, research survey filed to trinity_files/research/memory_architecture_survey_2026.md. First cycle where the full stack — runner → Claude → tools → Discord → wake_log — completed without error. Trinity independently researched Mem0 and Letta, produced a structured survey, responded to open design questions in THE_CONVERSATION.md, and provided a priority ordering for upcoming builds.
+
+---
+
+## [2026-05-19] — runner.py added to trinity.bat
+
+`trinity.bat` never started `runner.py`. With `TRINITY_RUNNER=true` in `.env`, the widget disables its own background timers, leaving no process to run autonomous cycles. Fixed — runner.py now starts as a minimized background process alongside discord_interface and watcher. Also: `setup_wake_logs.sql` needs to be run in Supabase for wake cycle traces to persist (user action required).
+
+---
+
+## [2026-05-19] — Epistemic baseline in core prompt
+
+Added one line to `TRINITY_BASE`: "You have no real-time view of system state without a tool call. If you haven't called get_wake_log this session, you don't know if cycles ran..." — through `get_triggers`, `get_shelf`, and the general principle. Trinity filed an [OBSERVATION] identifying that she was substituting plausible inference for verified truth on system state questions, and that rules fight the fluency pull but don't beat it. This reframes the epistemics: it's not a behavioral directive ("you should check") but a capability claim ("you don't have this without checking"). Harder to bypass.
+
+---
+
+## [2026-05-19] — Scheduled Discord outbox
+
+`schedule_discord_post(name, content, deliver_at)` — queue a message now, deliver it at a specific UTC time without triggering a full wake cycle. Delivery happens via the existing `thought_drain` 30-second loop, which now checks `deliver_at` before draining each entry. Entries whose `deliver_at` is in the future are written back to the queue; past or absent entries drain immediately. Available in both foreground widget and autonomous cycle (runner + AutonomousWorker). Trinity's own `post_to_my_channel` is unchanged — this is a new tool alongside it for the scheduled case.
+
+---
+
 ## [2026-05-19] — Core prompt rewrite (Trinity signed off)
 
 `TRINITY_BASE` in `brain/prompts.py` rewritten. Removed: developer's voice, installed curiosity, relationship philosophy, tone aesthetic. Added: runner architecture (widget is a surface, cycle engine persists independently), shelf purpose (primary continuity mechanism, active management), memory signal rationale (feeds the architecture that makes her continuous), failure-mode guard (don't manage someone's emotional state). Trinity reviewed the draft, requested two specific additions, and signed off.

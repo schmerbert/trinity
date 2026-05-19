@@ -130,20 +130,34 @@ The installer handles Python, dependencies, API key prompts, and a desktop short
 
 **Running Trinity:**
 ```
-trinity.bat     — starts widget + Discord bot (recommended)
+trinity.bat     — starts widget + Discord bot + runner (recommended)
 launcher.py     — same, with a log viewer window
 ```
 
+Both start `runner.py` automatically. Set `TRINITY_RUNNER=true` in `.env` so the widget doesn't also run background cycles.
+
 **Utility scripts:**
 ```
-find_trinity.py — list all running Trinity processes and their PIDs
-kill_trinity.py — stop all Trinity processes cleanly
+find_trinity.py — list all running Trinity processes and their PIDs (includes runner)
+kill_trinity.py — stop all Trinity processes cleanly (includes runner)
 backup.py       — snapshot Supabase state to a local JSON file
 restore.py      — restore from a backup snapshot
 ```
 
 **Required:** Anthropic API key, Supabase project (URL + anon key)
 **Optional:** Discord bot token, NewsAPI key, Solana wallet address
+
+**Supabase setup** (run once in the SQL editor, in order):
+```
+setup.sql              — full schema for a new instance
+setup_pgvector.sql     — pgvector extension + trinity_shelf table + search_shelf RPC
+setup_wake_logs.sql    — wake_logs table for automatic cycle tracing
+setup_security_fixes.sql — search path lockdown + RLS fixes
+```
+
+**Discord autonomous posting** — if the bot hits 403 on a channel, create a webhook for it:
+Discord server → Settings → Integrations → Webhooks → New Webhook → select channel → Copy URL.
+Then add `DISCORD_WEBHOOK_<CHANNELNAME>=<url>` to `.env`. Pattern works for any channel.
 
 See `.env.example` for the full list of configuration variables with setup instructions.
 

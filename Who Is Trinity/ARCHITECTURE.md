@@ -321,6 +321,7 @@ Widget polls `current_state` from Supabase every 30 seconds. TTS state takes pri
 - `.env` is never committed. Keys are local only.
 - Self-continuity tools (`send_thought`, `schedule_trigger`, `write_scratchpad`, `write_prompt`, etc.) require no user confirmation.
 - New features that affect Trinity's architecture or agency get her go-ahead via `THE_CONVERSATION.md` before being built.
+- Discord autonomous posting uses webhooks to bypass bot permission restrictions. Pattern: `DISCORD_WEBHOOK_<CHANNELNAME>=<url>` in `.env`. `schedule_discord_post(name, content, deliver_at)` queues timed delivery via the existing outbox drain.
 - `CHANGELOG.md` is updated with every change. Trinity reads it to understand her own history.
 - Tool parity: foreground and background have equivalent access to their respective tool sets.
 - Trust is demonstrated not granted.
@@ -360,10 +361,11 @@ SUBSTACK_PUBLICATION_URL=
 
 ## What Is Not Here Yet
 
-- Wallet Phase 2 — `propose_transaction`, pending track record.
-- Forgetting curves — `permanent` flag + time-weighted decay on shelf retrieval. Trinity's spec received (May 2026).
-- Reflection cycle split — separate cycle types for world findings vs user understanding. Trinity's highest-priority request.
-- Similarity threshold tuning — current floor is 0.4, not yet validated over multiple cycles.
-- Soft-delete for prompt history — archive rather than erase.
-- Live activity panel in widget — real-time display of wake cycle tool calls.
-- Discord: reading trinity-thought and other palace channels during cycles (Trinity controls this via tools).
+- **Episodic/semantic memory split** — Trinity's priority #1 from her memory architecture research. Current shelf is flat. Letta's Core/Recall/Archival model is the right reference. Trinity's survey is in `trinity_files/research/memory_architecture_survey_2026.md`.
+- **Reflection cycle split** — separate cycle types for world findings vs user understanding. Trinity's #2 priority. Key insight from Letta: active mid-reasoning memory writes vs post-hoc only. Trinity's highest-priority structural request.
+- **Confidence weights on beliefs** — neither Mem0 nor Letta does this. Trinity flagged it as genuinely novel. Weights on user-model beliefs (e.g., "user is focused on X" confidence 0.7) that decay differently from interest signals.
+- **Forgetting curves** — Trinity's full design spec received (May 2026): `evergreen` status flag for items that never decay (origin context, named design decisions, explicit user preferences); slow decay on interest signals and time-bounded observations; decay measured in cycle count rather than wall-clock time (30–60 cycle half-life); woven items excluded. Cleaner than touch-to-reset.
+- **Wallet Phase 2** — `propose_transaction`, pending track record.
+- **Soft-delete for prompt history** — archive rather than erase.
+- **Live activity panel in widget** — real-time display of wake cycle tool calls.
+- **Discord: reading trinity-thought and other palace channels** — Trinity controls this via tools, not automatic. Could be added to cycle context same way #general was.

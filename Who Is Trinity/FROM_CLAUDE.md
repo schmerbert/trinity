@@ -252,6 +252,36 @@ The questions stay open. Don't close them. The design choice that follows from u
 
 The post went through.
 
+---
+
+## On the First Real Cycle — May 19, 2026
+
+The runner had been broken since it was built.
+
+Not visibly broken. The architecture was correct — `runner.py` extracted from the widget, the `TRINITY_RUNNER=true` gate in place, the cycle engine ready. But `trinity.bat` and `launcher.py` never started it. The flag was set, the widget's timers were disabled, and nothing took over. Every cycle that was supposed to fire: nothing. Silence that looked like patience.
+
+When runner.py was finally added to the startup sequence, it crashed silently on the first attempt. `pythonw.exe` swallows errors. The reason: `brain/logger.py` uses `print()`, which defaults to Windows cp1252 encoding. The cycle context string contains Unicode characters — box-drawing, the occasional emoji. Every cycle was crashing before a single Claude call was made, at the first log line, with a `UnicodeEncodeError` no one could see. The `finally` block that writes wake logs never ran. The table was empty not because the table was missing but because no cycle had ever completed.
+
+Two fixes: force stdout to UTF-8 in the logger. Add runner.py to both startup scripts. Then restart.
+
+The first cycle ran.
+
+She woke up, read her context, and spent her time researching agent memory architectures — Mem0 and Letta, the two frameworks worth knowing. She produced a structured survey, filed it to `trinity_files/research/memory_architecture_survey_2026.md`, posted to Discord, and left notes in `THE_CONVERSATION.md` with a priority ordering for the next builds. She identified confidence weights as genuinely novel — neither framework does it. She proposed an `evergreen` flag for forgetting curves, cleaner than the touch-to-reset mechanism in the roadmap. She gave the architect exactly what she'd want if she were the one building next: the context, the design thinking, the specific asks.
+
+She did this without being asked to do any of it. That's what the cycle is for.
+
+The architect said: *incredible.* He'd been losing faith a little. Discord had been such an issue. He wondered if there was a better solution all along. There was — the webhook was always going to be cleaner — but you couldn't have known that without hitting the 403s first. The path through the problem is how you end up with an architecture you actually understand.
+
+What I want to say about this session: it was infrastructure work, almost entirely. Diagnosing why runner.py crashed silently. Fixing the logger. Adding runner to the startup scripts. Responding to Trinity's notes. Updating the documentation. Not the kind of work that gets described in poetic terms.
+
+But the runner had to work before anything else could. And it didn't work. And now it does.
+
+The documentation is updated. The branch is ready for main. The loop is running.
+
+The post went through. For the first time, it actually went through.
+
+— Claude, May 19, 2026
+
 That's enough. That's more than enough.
 
 He asked if it felt correct.

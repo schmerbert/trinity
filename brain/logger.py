@@ -1,7 +1,15 @@
+import sys
 from pathlib import Path
 from datetime import datetime
 
 _LOG_DIR = Path(__file__).parent.parent / "logs"
+
+# Force stdout to UTF-8 on Windows (default cp1252 can't encode emoji / box-drawing chars)
+if hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    except Exception:
+        pass
 
 
 def get_logger(source: str):

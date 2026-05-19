@@ -31,6 +31,13 @@ def launch():
     )
     procs.append(discord)
 
+    runner = subprocess.Popen(
+        [str(PY), str(ROOT / "runner.py")],
+        cwd=str(ROOT),
+        creationflags=subprocess.CREATE_NEW_CONSOLE
+    )
+    procs.append(runner)
+
     widget = subprocess.Popen(
         [str(PY), str(ROOT / "voice" / "widget.py")],
         cwd=str(ROOT)

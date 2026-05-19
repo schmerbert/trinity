@@ -317,6 +317,23 @@ _REGISTRY = [
         "timeout":     90,
     },
     {
+        "name": "schedule_discord_post",
+        "description": "Schedule a Discord post for timed delivery — queue a message now, have it land at a specific time without a full wake cycle. Use for 'post at 10pm', 'post before bed', or any case where you want to set something up and walk away.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "name":       {"type": "string", "description": "Palace channel name — partial, case-insensitive match"},
+                "content":    {"type": "string", "description": "Message to post"},
+                "deliver_at": {"type": "string", "description": "Delivery time — ISO datetime UTC, e.g. '2026-05-19T22:00:00'"}
+            },
+            "required": ["name", "content", "deliver_at"]
+        },
+        "capability":  "schedule_discord_post(name, content, deliver_at) — queue a Discord post for delivery at a specific UTC time. Delivers via thought_drain, no wake cycle required.",
+        "category":    "palace",
+        "interfaces":  {"discord", "widget"},
+        "background":  True,
+    },
+    {
         "name": "read_discord_channel",
         "description": "Read messages from one of your Discord palace channels by name. Use to review what you've written or what's been posted.",
         "input_schema": {

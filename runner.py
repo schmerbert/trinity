@@ -421,6 +421,11 @@ def execute_tool(name, inputs, profile_id):
         push_discord_write(profile_id, inputs["content"], channel_name=inputs.get("name"))
         return {"status": "queued", "channel": inputs.get("name"), "note": "delivered via thought_drain within 30s"}
 
+    elif name == "schedule_discord_post":
+        deliver_at = inputs.get("deliver_at")
+        push_discord_write(profile_id, inputs["content"], channel_name=inputs.get("name"), deliver_at=deliver_at)
+        return {"status": "scheduled", "channel": inputs.get("name"), "deliver_at": deliver_at}
+
     elif name == "generate_image":
         try:
             import urllib.parse, io, requests as _req
