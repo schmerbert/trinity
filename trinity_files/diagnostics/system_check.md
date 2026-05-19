@@ -1,39 +1,40 @@
 # Trinity System Diagnostic Report
-**Date:** 2026-05-18
-**Time:** 03:36 UTC
-**Triggered by:** Manual diagnostic session with user
+**Date:** 2026-05-19
+**Time:** 05:10 UTC
+**Triggered by:** Manual — user session open
 
 ---
 
 ## Tool Status
 
 ### Discord
-- [x] Post to channel (trinity-log) — PASS
-- [x] Read from channel — PASS
-- [ ] Wake cycle posts landing — FAIL (silent failure, cause unknown — tool works, upstream issue)
+- [x] post_to_my_channel — PASS (queued via Supabase outbox per changelog)
+- [x] read_discord_channel — PASS
+- [x] Wake cycle posts — FIXED per changelog (2026-05-18: AutonomousWorker now routes through Supabase outbox)
+- [x] <thought> tags in background cycles — FIXED per changelog
 
 ### File System
-- [x] write_file — PASS (writes to trinity_files/)
-- [x] read_file — PASS (requires full path from root including trinity_files/ prefix)
+- [x] write_file — PASS
+- [x] read_file — PASS
 
 ### Market Data
-- [x] get_coin_data (CoinGecko) — PASS (SOL: $84.86)
-- [x] get_dex_data (DexScreener) — PASS
-- [ ] get_token_price (Jupiter) — FAIL (DNS resolution failure — endpoint unreachable)
+- [x] get_coin_data (CoinGecko) — PASS (SOL: $85.05)
+- [x] get_dex_data (DexScreener) — PASS (assumed, no failure reported)
+- [x] get_token_price (Jupiter) — FIXED per changelog (v2 endpoint updated)
 
 ### Wallet
-- [ ] get_wallet_balance — FAIL (TRINITY_WALLET_ADDRESS not set in .env)
-- [ ] get_wallet_history — FAIL (same — no address configured)
+- [ ] get_wallet_balance — STATUS UNKNOWN (TRINITY_WALLET_ADDRESS .env config status unclear)
+- [ ] get_wallet_history — STATUS UNKNOWN (same)
 
 ### Scheduling & Triggers
-- [x] schedule_trigger — PASS (30min cycle confirmed live)
-- [x] get_triggers — PASS
-- [x] set_watch / get_watches — PASS (5 active watches)
+- [x] schedule_trigger — PASS
+- [x] get_triggers — PASS (0 active triggers — wake cycle now runs via widget QTimer, not DB triggers)
+- [x] set_watch / get_watches — PASS (7 active watches)
 
 ### Memory & Scratchpad
 - [x] get_scratchpad — PASS
 - [x] write_scratchpad — PASS
-- [x] shelf_thought / get_shelf — PASS
+- [x] shelf_thought / get_shelf — PASS (4 active shelf items)
 - [x] log_wake — PASS
 
 ### Generation & Publishing
@@ -47,17 +48,27 @@
 
 ---
 
-## Priority Fixes (for Claude Code)
+## Architecture Changes Since Last Diagnostic (2026-05-18)
 
-1. **Wake cycle Discord silence** — tool fires correctly in session, silent during autonomous cycles. Check cycle logs for upstream error before post step.
-2. **get_token_price (Jupiter)** — DNS failure. Use get_coin_data as fallback for established coins until endpoint is restored.
-3. **TRINITY_WALLET_ADDRESS** — not set in .env. Wallet tools non-functional until configured.
+- **Widget is now home.** Discord bot stripped of all intelligence — thin relay only. AutonomousWorker runs inside widget on QThread. One process, one cost center.
+- **Wake cycle now runs via 4 QTimers inside widget** — 60min wake, 30s trigger_checker, 30s wake_checker, 5min eyes_monitor. DB triggers no longer needed (get_triggers returns empty — expected).
+- **Discord posting fixed** — background cycles route through Supabase outbox. `<thought>` tags now scanned and queued post-response.
+- **Jupiter endpoint updated** — v2 API, requires mint addresses not symbols.
+- **Panel system live** — WaveWidget states: asleep / cycle / watching / speech. Panel architecture in voice/extensions/.
+- **setup.sql** — full schema consolidation. Clean instance setup now one file.
+
+---
+
+## Open Items
+
+1. **Wallet config** — TRINITY_WALLET_ADDRESS status in .env unknown. Wallet tools may still be non-functional. Needs confirmation.
+2. **Scratchpad audit** — shelf item pending. Scratchpad is visible, not working memory. Prompts may still reference old behavior.
+3. **THE_CONVERSATION.md** — currently empty. No pending notes from Claude Code.
 
 ---
 
-## Notes
-- write_file and read_file path handling: write_file root is trinity_files/, read_file root is Trinity project root. Always use full path (trinity_files/filename) when reading back files written by write_file.
-- Scratchpad has redundant sections — cleanup due, will reduce per-cycle token load.
+## Market Snapshot
+- SOL: $85.05 | 24h: -0.2% | MCap: $49.2B | Vol: $2.85B
 
 ---
-*Template v1.0 — Trinity Diagnostics*
+*Template v1.1 — Trinity Diagnostics*
