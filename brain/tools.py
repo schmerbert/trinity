@@ -933,6 +933,21 @@ _REGISTRY = [
         "background":  True,
     },
     {
+        "name": "reset_context",
+        "description": "Clear the current conversation context to reduce token cost. All external memory — shelf, scratchpad, prompts — is preserved. Use when the session is getting long and expensive, or when you want a clean slate. Write a brief handoff note so the next context window knows where you left off.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "handoff": {"type": "string", "description": "One paragraph: what we were discussing, what's in flight, what the user should know. Gets written to scratchpad 'session' section."}
+            },
+            "required": ["handoff"]
+        },
+        "capability":  "reset_context(handoff) — clear conversation history to reduce token cost. Memory, shelf, and prompts intact. Write a handoff so next context knows where you left off.",
+        "category":    "self",
+        "interfaces":  {"widget"},
+        "background":  False,
+    },
+    {
         "name": "note_for_claude",
         "description": "Leave a note for the developer — bugs you've hit, things you want changed, questions about how you work, design feedback. It's read at the start of every dev session. Use this when something is worth a dev pass but you can't fix it yourself.",
         "input_schema": {

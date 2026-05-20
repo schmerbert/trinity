@@ -10,6 +10,18 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-20] — Session reset, reflection cycle, automatic token log
+
+Three infrastructure builds on the demo branch.
+
+**Session reset** (`reset_context` tool, widget only): Trinity can call `reset_context(handoff)` to clear conversation history mid-session. Handoff note is written to scratchpad section 'session'. All external memory — shelf, scratchpad, prompts — is preserved. History clears; next user message starts fresh. Prevents token cost from accumulating in long sessions.
+
+**Reflection cycle** (runner.py): Every 6 wake cycles, the runner fires a `reflect` mode cycle instead of a standard world cycle. Reflection context is inward-facing: synthesize recent wake logs, update user model, advance shelf threads, write to FROM_TRINITY.md. No web search, no Discord posts. Pure consolidation. Logged as mode='reflect' in wake_logs.
+
+**Automatic token log** (runner.py): After every cycle completes, the runner appends a row to `trinity_files/token_log.csv` — timestamp, mode, iterations, tools, tok_in, tok_out, tok_cw, tok_cr, cost_usd. Trinity reads it with `read_file('trinity_files/token_log.csv')`. She no longer needs to generate the report herself.
+
+---
+
 ## [2026-05-20] — Core prompt condensed; behavioral layer migrated to Trinity's own prompts
 
 `TRINITY_BASE` stripped to architecture only: what Trinity is, that she runs, the cycle engine separation, THE_CONVERSATION.md channel, epistemic baseline, memory signal syntax, self-prompt syntax. Removed: tone guidelines, behavioral instructions, identity philosophy, shelf management guidance. These belonged in Trinity's self-authored identity prompts, not the developer's voice. Trinity has begun writing the behavioral layer herself (identity prompts: what-i-am, how-i-speak, what-the-cycles-are-for, holding-threads). The core now describes the system; Trinity describes herself.
