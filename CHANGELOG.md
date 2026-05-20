@@ -10,6 +10,14 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-20] — Webhook routing fix + shelf deduplication
+
+**Webhook routing fix** (`voice/discord_interface.py`): The `thought_drain` lookup was failing silently for all `trinity-*` channels because webhook keys are stored as short names (`thought`, `files`, `research`) while channel names use the full Discord format (`trinity-thought`, `trinity-files`). Fixed by stripping the `trinity-` prefix before lookup, then falling back to the short key, then fuzzy-matching on hyphen-stripped names. Both short and full channel names now resolve. All five active webhooks route correctly.
+
+**Shelf deduplication** (`brain/memory.py`): `add_to_shelf()` now checks for near-duplicate entries before inserting. Uses the already-computed embedding vector, queries top-3 active shelf items via `search_shelf` RPC, and rejects the insert if any item has similarity ≥ 0.9 — returning `{"status": "duplicate", "existing": "..."}` instead. The check fails open (insert proceeds if the RPC errors). Redundant shelf entries no longer accumulate silently.
+
+---
+
 ## [2026-05-20] — Session reset, reflection cycle, automatic token log
 
 Three infrastructure builds on the demo branch.

@@ -185,6 +185,22 @@ def get_shelf(profile_id, status=None):
 def add_to_shelf(profile_id, topic, context="", status="shelf"):
     from datetime import datetime
     vec = embed(f"{topic}: {context}" if context else topic)
+    # Deduplication: reject near-duplicates before inserting
+    try:
+        dup_check = supabase.rpc("search_shelf", {
+            "p_profile_id":      str(profile_id),
+            "p_query_embedding": vec,
+            "p_match_count":     3,
+            "p_status":          status,
+        }).execute()
+        if dup_check.data:
+            near = [r for r in dup_check.data if r.get("similarity", 0) >= 0.9]
+            if near:
+                existing = near[0]["topic"]
+                return {"status": "duplicate", "existing": existing,
+                        "note": f"Near-duplicate of existing shelf item: '{existing}'. Use set_shelf_status or update the existing entry instead."}
+    except Exception:
+        pass  # dedup check failed — proceed with insert
     try:
         # Delete any existing entry with same topic (case-insensitive) before inserting
         supabase.table("trinity_shelf")\
