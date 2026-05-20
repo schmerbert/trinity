@@ -199,3 +199,34 @@ system follow from the foundation, not before it.
 
 *This document captures the founding vision. Additions append below this line.*
 *The vision does not get revised — new thinking goes in new sections.*
+
+---
+
+## On Token Cost and Expressive Range — May 2026
+
+Trinity pays output tokens for every tool call she makes. Fine-grained UI gesture
+calls (separate move_cursor, scroll_to, highlight in sequence) would compound fast
+across cycles and sessions. The architecture avoids this with one principle:
+
+**Trinity describes what. The UI decides how.**
+
+`open_panel("browser", url)` is one token-cheap call. What the UI does with it —
+how the panel arrives, how the cursor behaves during load, what animations play —
+is the renderer's decision, not Trinity's. She pays once. The UI spends none of
+her tokens making it expressive.
+
+Most gestures derive for free from work Trinity is already doing:
+- Browser highlight derives from content she quotes in her response
+- Doc cursor derives from streaming — her tokens appear as the cursor types
+- Panel transitions are the UI's default behavior, not explicit calls
+
+**The door stays open for richer expression later.**
+
+The tool call interface is the right place to expand. Optional parameters on existing
+calls let Trinity express intent without requiring it: `open_panel("browser", url,
+weight="urgent")` or `move_cursor(panel_id, target, speed="deliberate")`. The UI
+interprets these; ignores them if absent. Trinity can be expressive when it matters
+and silent when it doesn't.
+
+The constraint now: don't make her pay tokens for what the renderer can infer.
+The expansion later: give her the vocabulary to direct the renderer when she wants to.
