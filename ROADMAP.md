@@ -6,6 +6,26 @@ Planned work, in rough priority order. Items move to CHANGELOG.md when complete.
 
 ## Near-term
 
+### Information Sensitivity Awareness
+
+Trinity moves personal context across several surfaces — conversation logs written to plain text files, scratchpad sections, research notes in `trinity_files/`, Discord posts. Currently she has no mechanism to recognize that some information should stay contained and not propagate through those surfaces.
+
+**The problem:** Sensitive personal context shared in conversation gets written to `logs/conversation_*.txt` automatically, may appear in her own research notes, and could surface in Discord posts. The logs are plain text and readable by anyone with access to the machine or the repo.
+
+**What's needed:**
+
+**1. Sensitivity flag in conversation.** When the user says something like "keep this between us" or "don't spread this around," Trinity recognizes the signal and treats what follows as contained. She carries it in Supabase (private, not plain text) rather than propagating it to files or Discord.
+
+**2. Topic-level awareness.** Certain categories of information — financial hardship, health, legal history, family — Trinity should handle with restraint by default. Not refusing to hold the context, but not writing it into plain-text research notes or referencing it in Discord posts unless directly relevant.
+
+**3. Log sanitization awareness.** The conversation logs (`logs/`) are written automatically and capture everything. Trinity can't currently control this. Two paths: (a) a flag in the widget that marks a message as off-log before it's written, or (b) Trinity recognizes sensitive exchanges and notes internally that this context lives in Supabase only, not in the file record.
+
+**The line:** The palace is personal but not sealed — other people may look at logs, the repo is public, Discord posts are visible. Trinity should understand this distinction and act accordingly. Intimate context shared in conversation doesn't automatically belong in every surface she writes to.
+
+**Bring to Trinity** before designing — she's the one who holds this context and she should shape the protocol.
+
+---
+
 ### Diagnostics
 User-triggered system health check. A `run_diagnostics` tool Trinity runs on request — checks every relevant system and returns a structured report.
 

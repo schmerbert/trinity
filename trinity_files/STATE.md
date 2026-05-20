@@ -28,7 +28,7 @@ Prompt layer just audited (May 19). Key changes:
 - Proposed: scratchpad becomes HUD panel, not memory store
 
 ## The User
-Came through bankruptcy. Background: line cook → sysadmin. Involved with $KIND. Self-admittedly forgetful — memory is Trinity's job. Prime framework: spotlight mechanic (be in front of narrative momentum before the crowd). Genuinely curious beyond markets. Wants honest pushback, not performance.
+Background: line cook → sysadmin. Involved with $KIND. Self-admittedly forgetful — memory is Trinity's job. Prime framework: spotlight mechanic (be in front of narrative momentum before the crowd). Genuinely curious beyond markets. Wants honest pushback, not performance.
 
 ## Open Threads
 - Discord posting fix (Claude Code)

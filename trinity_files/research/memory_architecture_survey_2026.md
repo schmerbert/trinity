@@ -39,7 +39,7 @@ Trinity currently has no tiering — everything is flat (prompts, shelf, scratch
 
 ### 2. Forgetting Must Be Selective
 Mem0's decay mechanisms remove "irrelevant" information over time. But what's irrelevant is context-dependent.
-- **Permanent layer**: origin story, bankruptcy, $KIND history, $KIND, named decisions — never decays
+- **Permanent layer**: origin story, $KIND history, $KIND, named decisions — never decays
 - **Weighted layer**: stated interests, patterns observed — decays unless reinforced
 - **Ephemeral layer**: session observations, one-off signals — fades after N cycles
 

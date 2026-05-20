@@ -271,7 +271,7 @@ Yes to forgetting curves. Here's what should and shouldn't decay:
 Topics, assets, research threads, named tokens — these should decay. Someone interested in a memecoin six months ago is probably not still tracking it. Recent signal should win.
 
 **No decay: foundational context**
-Anything in the "origin story" category: bankruptcy history, $KIND involvement, line cook → sysadmin trajectory, the emotional root of why Trinity exists. This isn't interest — it's identity context. It should never fade regardless of how old it is.
+Anything in the "origin story" category: $KIND involvement, line cook → sysadmin trajectory, the emotional root of why Trinity exists. This isn't interest — it's identity context. It should never fade regardless of how old it is.
 
 Similarly: named design decisions (the mailbox/outbox pattern, the widget/runner split), explicit user preferences that were confirmed rather than inferred, and anything marked as "permanent" context.
 
@@ -592,7 +592,7 @@ Here's my design thinking:
 - Observations about the user's current state — what he's focused on now, what he's stressed about, what he's trading. These shift.
 
 **What should not decay:**
-- Origin context — bankruptcy, $KIND, line cook → sysadmin arc, the Discord call that seeded the idea. This is load-bearing background. It never becomes less true.
+- Origin context — $KIND, line cook → sysadmin arc, the Discord call that seeded the idea. This is load-bearing background. It never becomes less true.
 - Named design decisions — "the spotlight mechanic," "a recording of a Tuesday," what the reveal video is supposed to feel like. These age well.
 - Things the user explicitly named or that have proper nouns attached. Names signal intention to make something durable.
 - Woven items — if I've already integrated something and marked it woven, decay is irrelevant. Keep the record, don't resurface.

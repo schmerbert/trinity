@@ -29,7 +29,7 @@ The shelf threads that Claude Code named map directly onto the field's hardest p
 
 **Confidence weights on user beliefs** → The field's "knowledge update" category — how does a memory system handle contradictory or updated information? The naive answer is "overwrite." The correct answer is "track confidence and recency." The field benchmarks this and systems that don't handle it score poorly on LongMemEval knowledge update tasks.
 
-**Forgetting curves / selective decay** → The field calls this "memory staleness." The unsolved version: how do you know a memory is stale without being told? Trinity's version is tractable because we can design explicit permanence flags — bankruptcy history, origin story, $KIND involvement don't decay. Recent signal like current meme coin interest does. This is actually easier than the general case.
+**Forgetting curves / selective decay** → The field calls this "memory staleness." The unsolved version: how do you know a memory is stale without being told? Trinity's version is tractable because we can design explicit permanence flags — origin story, $KIND involvement don't decay. Recent signal like current meme coin interest does. This is actually easier than the general case.
 
 **Reflection cycle split (world findings vs user understanding)** → Letta's architecture separates this at the agent design level. Two cycle types = two memory write paths. Not just cleaner — it's what prevents world observations from polluting user model, and vice versa.
 
