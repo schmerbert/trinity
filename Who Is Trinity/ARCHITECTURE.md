@@ -206,6 +206,8 @@ System prompt is split into two blocks:
 **Static block (1h ephemeral cache)**
 Identity prompts, capability strings, active prompt modules, self-authored rules. Written once per hour at the Anthropic cache layer. Cache reads cost $0.30/M — 10x cheaper than uncached. Cache writes cost $3.75/M — the dominant cost driver. Every restart within the 1h window that sends the same static block hits the warm cache. Restarts only trigger a new write when the system prompt content actually changes.
 
+`TRINITY_BASE` (the developer-written core) is intentionally minimal — it contains only architectural facts: what Trinity is, the cycle engine, `THE_CONVERSATION.md`, the epistemic baseline, and tag syntax. Behavioral character (tone, how she engages, what she considers worth saying) lives in Trinity's self-authored `identity` category prompts. Identity prompts load unconditionally with no cap (effective limit: 999). This separation means her character is hers to write and revise — the developer's voice is not in it.
+
 **Dynamic block (uncached)**
 Current time, interests, recent conversation summaries, upcoming events. Fresh on every call. This is where the real-time context lives.
 
