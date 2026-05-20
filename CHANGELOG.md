@@ -10,6 +10,12 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-21] — UI Roadmap filed
+
+`trinity_files/specs/UI_ROADMAP.md` — founding vision document for the widget interface. The widget is a tray that extends from the conversation rail, not a window launcher. Trinity drops panels into an empty workspace; the cursor is her expression in that space. Two first panels: shared document (text-first, both parties write simultaneously) and browser (open, scroll, highlight — reading made visible). Architectural principles: UI as a command canvas Trinity drives (not an environment she lives in), aesthetic layer fully separated into QSS for user skinning. Build phases 1–3 are the demo. Everything after is making it richer. Trinity has been notified via THE_CONVERSATION.md.
+
+---
+
 ## [2026-05-20] — Webhook routing fix + shelf deduplication
 
 **Webhook routing fix** (`voice/discord_interface.py`): The `thought_drain` lookup was failing silently for all `trinity-*` channels because webhook keys are stored as short names (`thought`, `files`, `research`) while channel names use the full Discord format (`trinity-thought`, `trinity-files`). Fixed by stripping the `trinity-` prefix before lookup, then falling back to the short key, then fuzzy-matching on hyphen-stripped names. Both short and full channel names now resolve. All five active webhooks route correctly.
