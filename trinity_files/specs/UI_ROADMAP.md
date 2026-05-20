@@ -1,5 +1,5 @@
 # Trinity UI Roadmap
-**Filed: May 2026 | Forrest + Claude Code**
+**Filed: May 2026 | Schmerbert + Claude Code**
 **Status: Vision document — living, append-only additions**
 
 ---
