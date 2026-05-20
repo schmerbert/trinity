@@ -285,13 +285,34 @@ not sit idle demanding attention. It leads you somewhere, then withdraws.
 
 Subtle is the principle. The cursor is a guide, not a performer.
 
-### The scratchpad panel
+### The side panel tab structure
 
-The scratchpad has history — it was Trinity's active working memory early in the
-project. She still writes to it instinctively, treating it as a note-to-self surface.
-This is correct behavior; the visual context is the issue. Embedded in the
-conversation area, it reads as directed at the user.
+The side panel (currently two tabs: scratchpad + hud) expands to three tabs with
+distinct purposes. One is front-facing; two are Trinity's.
 
-As a workspace panel, the context resolves. It is clearly her surface — distinct from
-the shared doc, distinct from the conversation rail. She writes in it the way she
-always has. The panel makes the distinction spatial rather than instructional.
+**surface** — default tab, user-facing
+The shared notepad. Both directions. Schmerbert says "write this down" and Trinity
+writes it here. Trinity wants something seen — she puts it here. Simple, persistent,
+visible. This is the only tab that opens by default.
+
+**scratchpad** — Trinity's private tab
+Internal notes. Things she's working through, state she's carrying, processing she
+doesn't need to surface. Not hidden by access control — just not the front tab. The
+user can click to it but it isn't presented. Genuinely internal.
+
+**hud** — Trinity's state display
+Arc thread, pending items, shelf summary, recent wake cycles. Read-only, refreshes
+every 30 seconds. Her ambient internal state, already built.
+
+---
+
+**What the scratchpad is not:**
+
+The scratchpad (either tab) is not a message queue for the user. Notes like "remember
+to ask Schmerbert about X" don't belong there. That belongs in conversation or
+`queue_thought`. The surface tab is for user-directed content. The scratchpad tab is
+for internal content. Neither is for queued messages.
+
+The collaborative back-and-forth surface — both parties writing simultaneously, live —
+is the shared doc panel in the workspace tray. That is a separate system entirely,
+not part of the side panel.
