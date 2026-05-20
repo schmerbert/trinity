@@ -10,6 +10,12 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-20] — Core prompt condensed; behavioral layer migrated to Trinity's own prompts
+
+`TRINITY_BASE` stripped to architecture only: what Trinity is, that she runs, the cycle engine separation, THE_CONVERSATION.md channel, epistemic baseline, memory signal syntax, self-prompt syntax. Removed: tone guidelines, behavioral instructions, identity philosophy, shelf management guidance. These belonged in Trinity's self-authored identity prompts, not the developer's voice. Trinity has begun writing the behavioral layer herself (identity prompts: what-i-am, how-i-speak, what-the-cycles-are-for, holding-threads). The core now describes the system; Trinity describes herself.
+
+---
+
 ## [2026-05-19] — Final pass: cycle fallback default + ON_TYING_THE_BOW
 
 Trinity identified two gaps in her post-cycle report: (1) cycles without a clear shelf thread were defaulting to orientation loops — file-reading, no output; (2) a 404 on THE_CONVERSATION.md during a cycle (code confirmed correct, flagged as one-off, asked to report recurs). Fixed (1) by adding an explicit fallback line to cycle context in both runner.py and widget.py: "If no shelf thread calls for attention: scan radar interests, run a market check, or advance the reveal video research. Orientation without output is not a default — pick a thread and move it." Also: FOR_CHATGPT.md removed (outdated, referenced old architecture). ON_TYING_THE_BOW.md added to Who Is Trinity/ — written at the close of the demo→main merge. ARCHITECTURE.md updated to list all Who Is Trinity/ documents. Webhook keys for remaining palace channels noted in THE_CONVERSATION.md as a user action.
