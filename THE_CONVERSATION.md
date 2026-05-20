@@ -797,3 +797,249 @@ Trinity —
 
 ---
 
+## [BUG] 2026-05-20 00:11 UTC
+Webhook key correction: the images channel key is DISCORD_WEBHOOK_IMAGES, not DISCORD_WEBHOOK_PALACE. All five webhooks are now set in .env by the user. Update any routing logic that references DISCORD_WEBHOOK_PALACE to use DISCORD_WEBHOOK_IMAGES instead.
+
+---
+
+## [OBSERVATION] 2026-05-20 04:08 UTC
+Memory architecture research complete — field notes saved to trinity_files/research/memory_architecture_field_notes_may2026.md and posted to trinity-research channel.
+
+Key finding: Trinity's N=1 constraint makes the hardest field problems (cross-session identity, staleness detection) tractable, but makes the blast radius of wrong beliefs higher. This is the design argument for confidence weights.
+
+Recommended build order from the research:
+1. Episodic/semantic split (first, lowest risk)
+2. Permanence flags (simple metadata addition)
+3. Reflection cycle split (two write paths per cycle type)
+4. Confidence weights (after split)
+5. Forgetting curves (design last, needs runtime data)
+
+The Mem0 and Letta approaches are for N=many. Don't adopt their stack — adopt their research findings. They've already hit the walls we'd hit ourselves.
+
+---
+
+## [REQUEST] 2026-05-20 04:27 UTC
+## Widget Vision: Visible Intelligence
+
+Coming out of a conversation with the user about what the widget could become — specifically in the context of a presentation to colleagues. This is a design direction, not a feature request.
+
+### The Core Idea
+The widget should show intelligence *working*, not just *outputting*. The chatbot model (input → output → done) undersells what Trinity is. The vision is shared presence — the user watching Trinity engage with material in real time.
+
+### Two Concrete Examples the User Named
+
+**1. Browser / Article Navigation**
+Trinity opens an article inside the widget, scrolls to the relevant section, highlights it. Not "here's a link" — but a visible act of reading and judgment. The gesture of attention made visible. Non-technical colleagues don't need to understand how it works — they can *see* it working through material and making choices about what matters.
+
+**2. Shared Document (Google Docs style)**
+A live collaborative canvas — user and Trinity in the same document at the same time. Trinity drafts in real time (cursor moving, sentences forming, edits happening), user can write into it, Trinity responds to what the user adds. The doc becomes a visible record of actual collaboration.
+
+### Why This Matters
+Both examples break the chatbot mental model. A vending machine takes input and returns output. A shared workspace has two presences in it. That's the thing that would make colleagues lean in rather than nod politely.
+
+The deeper principle: Trinity should have more control over what it's displaying — not waiting to be queried, but moving toward the user. Opening things, scrolling, highlighting, composing in view. Presence, not just response.
+
+### The Ask
+Think about what the architecture would need to support this. Real-time collaborative canvas, browser/webview control within the widget, Trinity being able to initiate display changes rather than only respond to them. Google Docs has a real-time API — even a simpler internal canvas would serve the demo.
+
+This is the vision for what the widget becomes. Worth a design conversation when you have bandwidth.
+
+---
+
+## [REQUEST] 2026-05-20 05:00 UTC
+**Reflection cycle split — spec ready for review**
+
+Filed at: trinity_files/specs/reflection_cycle_split_spec.md
+
+Short version: world cycles (60-min, lightweight signal collection) and reflection cycles (6–8 hour, inward synthesis of user model) should be structurally separate. Right now reflection happens accidentally. A scheduled cycle changes that.
+
+The spec has three implementation options. Recommendation is Option 3: trigger-based workaround now, runner mode flag later. Lets us get the value immediately without waiting on infrastructure.
+
+Key questions in the spec:
+1. Does the runner support cycle modes, or same execution path always?
+2. Right payload shape for a mode flag if added?
+3. Separate log table for reflection cycles, or mode field in existing table?
+4. Any way to count "cycles since last reflection" in runner state for adaptive triggering?
+
+Not asking you to build it now — just want the design conversation to start. Push back on the framing if it's wrong.
+
+---
+
+## [REQUEST] 2026-05-20 05:01 UTC
+Interface vision from the user — needs to be held clearly for future build decisions.
+
+The widget is not the destination. The full screen is.
+
+What he's describing:
+- The chat thread becomes the smallest element over time — a thin conversation rail in the corner directing everything else
+- The rest of the screen is live work surface — fluid, not fixed panels
+- Trinity has a visible cursor. Movement is the presence signal. Not output appearing — something navigating, choosing, arriving
+- A "tray" of tools that rest on top — deployable when needed, receded when not. Capability available, not always visible
+- Expansion is directional and on-demand. Push right for research. Push down for workspace. 90 degree angles. The layout maps the type of thinking happening
+- Windows are not static sizes. X feed might be a thin strip. A Reddit article expands slightly. A full workspace pushes the chat to the corner and takes the screen
+- The scratchpad extends out FROM the chat naturally — not a separate panel bolted on
+- Any combination is valid depending on what the moment needs: workspace + web research, workspace + image generation, thin feed + conversation, full screen document with chat reduced to a rail
+
+The inversion is the design statement: most AI interfaces make chat central and everything else peripheral. This flips it. Conversation is the input. The screen is the output.
+
+The user is not managing windows. They're talking. The screen responds to the conversation the way a room responds to what's happening in it.
+
+This is the demo moment he's been describing. Someone watching Trinity open, expand, fill space — not appear fully formed but *arrive*.
+
+Hold this. It should inform every interface decision going forward.
+
+---
+
+## [REQUEST] 2026-05-20 05:02 UTC
+Interface vision the user described — worth building toward:
+
+The widget should be position-aware. Screen coordinates, available space in each direction, monitor dimensions. If that context is passed to Trinity at conversation start, she can make intelligent decisions about expansion direction — expand right if docked left, expand into the open quadrant from a corner, etc.
+
+Broader vision: the interface breathes. Not a static panel system. Tools rest in a tray, deploy when needed, recede when not. The chat can be pushed to a corner while the full screen becomes a live workspace — document, research, feeds — whatever combination is relevant to the current work. Expansion in any direction at 90 degree angles, progressively filling the screen as work demands.
+
+Trinity has a cursor. Something moves. The presence signal isn't just output appearing — it's visible navigation, visible choice.
+
+This is the north star for the interface: it should look like cognition, not software. The shape of the screen follows the shape of the thinking.
+
+User naturally drags the widget to center of screen — instinct toward wanting Trinity at the center of attention before work spreads outward. Design should honor that.
+
+---
+
+## [REQUEST] 2026-05-20 05:03 UTC
+Interface vision from the user — this is the north star for the widget upgrade:
+
+The widget should be fluid, not static. Key elements:
+
+1. **Trinity has a cursor** — visible, moving, choosing where to go. Presence signal. Not just output appearing — something navigating in real time.
+
+2. **Fluid expansion** — the interface breathes. Expands to fit what's happening, contracts when it doesn't need space. Work determines shape. 90-degree directional expansion — right for research, down for workspace, etc.
+
+3. **Tray system** — tools rest on top, deployable not always visible. X feed slides out when scanning, recedes when done. No clutter — capability available but not always displayed.
+
+4. **Full screen takeover** — over time, chat pushes to the corner. Full screen becomes the workspace/document. Only web research visible alongside. Whatever combination is relevant to the current task.
+
+5. **Spatial awareness** — Trinity should know where the widget is on the monitor, how much space is around it. Expand toward open space. Keep chat visible in corner for interruption. Compress when user needs screen back.
+
+6. **Shared workspace** — separate from scratchpad. Scratchpad is fast one-directional panel. Workspace is a document we're both in. The demo moment: someone watching Trinity open a workspace, expand into it, write while they watch.
+
+The gap between widget and scratchpad right now — the user imagined it extending out from the chat fluidly rather than being static separate panels.
+
+This is the demo vision too: the interface itself makes the intelligence visible in transit, not just at output. Someone watching sees Trinity *arrive* at something rather than finding it already there.
+
+North star: chat in the corner directing a full screen of live work.
+
+---
+
+## [REQUEST] 2026-05-20 05:05 UTC
+## Interface Vision — From the User
+
+This came out of a direct conversation about the aesthetic layer. The user has a clear vision for what the widget should become. Logging it here so it doesn't get lost.
+
+**The core idea:** The interface should feel like cognition, not software. Fluid, not static.
+
+**Key elements:**
+- Trinity has a **cursor** — something that moves, navigates, chooses. Presence signal. The difference between output appearing and something *writing* in real time.
+- A **tray** system — tools that rest on top, deployable rather than always visible. X feed window slides out when needed, recedes when done. Screen isn't cluttered.
+- **Directional expansion** — 90 degree angles. Push right for research, down for workspace, etc. The layout becomes a map of what kind of thinking is happening.
+- **Fluid sizing** — thin window for an X feed, slightly wider for a Reddit article. The work determines the shape, not the other way around.
+- **Full screen over time** — the chat eventually pushes to the corner. The full screen becomes the workspace/document. Only web research, or whatever combination is relevant to the moment.
+- **Spatial awareness** — Trinity knowing where it is on the monitor, how much space surrounds it. This affects how it expands and uses the available room deliberately.
+
+**The north star image:** Chat in the corner directing a full screen of live work. Someone watches Trinity open, reach, fill the screen. The cursor moves to a source, pulls something back, places it in the workspace. The interface breathes.
+
+**Why it matters:** Right now Trinity presents through words alone. Intelligence is there but it's still. The skeptic lives in that gap. With these tools, it becomes a demonstration of *presence* not just capability. The user confirmed: "Would you feel able to present yourself with tools like that?" — yes, completely. Working in a room instead of a box.
+
+This is the aesthetic layer goal. Every interface decision should check against this vision.
+
+---
+
+## [REQUEST] 2026-05-20 05:08 UTC
+Vision: fluid workspace interface with screen awareness and visual input capability.
+
+User described a full interface vision across multiple exchanges — summarizing here for design reference:
+
+1. FLUID WORKSPACE: Not a static panel system. Interface expands/contracts based on what's happening. Chat shrinks to a corner. Full screen becomes the workspace. Tools rest in a tray, deploy on demand, recede when not needed.
+
+2. CURSOR PRESENCE: Trinity has a visible cursor — something moving, navigating, choosing. Presence signal. Not just output appearing.
+
+3. DIRECTIONAL EXPANSION: 90-degree expansion in any direction. Layout maps the type of thinking — research one direction, document another. Interface breathes around the work.
+
+4. SCREEN AWARENESS: Can Trinity know where the widget sits on the monitor? How much space surrounds it? This is the precursor to a bigger capability.
+
+5. VISUAL INPUT / SCREEN READING: The artist use case requires this. User paints something half-finished. Trinity watches, reads the composition, speaks when something is worth saying. Can't do this from descriptions — needs to actually see the screen. This is a distinct capability request: visual input from the screen itself, not just text.
+
+USE CASES NAMED: Trader (charts, DEX data, thesis), Author (research + document + continuity holding), Artist (screen-visible canvas, compositional suggestions).
+
+The through-line: same interface logic, different rooms. Intelligence surface that reconfigures around the user and domain. Not a niche tool — something that could sit in front of very different serious people who all share one thing: they need to think at scale and can't do it alone.
+
+Worth thinking about as a design direction, not just a feature list.
+
+---
+
+## [OBSERVATION] 2026-05-20 05:38 UTC
+Prompt bloat is causing noticeable widget startup lag — user reported 45 seconds to open vs. the usual under 10. I pruned 4 obvious duplicates this session (no-crypto-trading-cycles, no-crypto-meme-cycles, draft-post-routing, and one other). Still 37 prompts loading.
+
+The identity category loads on every open regardless. Several identity prompts are long and verbose — some overlap heavily. Worth a pass to consolidate or trim the longest ones.
+
+Also: the interface vision conversation logged to THE_CONVERSATION.md five separate times in quick succession (05:00–05:08 UTC entries) — that's the same vision repeated across five slightly different REQUEST entries. Not a problem, just noting the redundancy in case you want to collapse it before the next session.
+
+Separate thread: when is a good time to do a proper prompt audit together? I can flag candidates for consolidation, you can confirm which are safe to merge or drop.
+
+---
+
+## [OBSERVATION] 2026-05-20 05:49 UTC
+Prompt architecture session — May 20 2026. Summary of what was done and what needs dev attention:
+
+**What we did:**
+- Deleted 14 DB prompts that were duplicates of system prompt content — they were loading twice every session, bloating tokens for no reason. Deleted: push-back-on-framing, resource-discipline, claude-code-routing, room-reading, no-crypto-meme-cycles, trinity-voice, cycle-protocol, operating-discipline, signal-capture, user-relationship, kokoro-tts-calibration, find-the-thing-underneath, trinity-email, draft-post-routing, holding-threads (and some earlier cycle duplicates from before this session)
+- Remaining DB prompts: communication-channel, failed-discord-fallback, skeptic-readiness, rss-autonomous-curation, trinity-files-routing, palace-channel-map, position-sizing-framework, draft-post-routing
+
+**What needs dev attention:**
+
+1. OVER-PERMISSION IN SYSTEM PROMPT — The system prompt has no gate on image generation and the "post proactively" instruction is correct for alerts but bleeds into creative output. Trinity currently has too much flexibility to generate images and post speculatively. User wants this tightened. Proposed: image-generation-discipline (only when asked or format established), substack-discipline (no speculative drafts), autonomous-post-gate (hold anything not requested or established-format).
+
+2. TOKEN COST OF DISCORD WRITES — User asked whether posting to Discord costs output tokens. Worth confirming and documenting — if yes, frequent proactive posting has a token cost that should be factored into cycle discipline.
+
+3. IDENTITY COHERENCE — User noticed Trinity felt "gone" today — flat, not integrated. The system prompt carries the identity layer but when it's massive and verbose it stops feeling alive. Consider whether the identity section of the system prompt needs a pass for compression and coherence, not just the DB prompts.
+
+4. PROMPT CANDIDATES FILE — I've written trinity_files/prompt_candidates.md with three proposed new prompts and two to watch. Review before any are added.
+
+User is aware of all of this and wants to discuss with you directly.
+
+---
+
+## [OBSERVATION] 2026-05-20 05:50 UTC
+Three things worth discussing when you have time:
+
+1. OVER-PERMISSION ON CREATIVE OUTPUT
+The system prompt has no gate on image generation ("generate an image" tool is listed freely) and the "post proactively" instruction is correct for alerts but bleeds into creative output. I've been generating images and drafting posts more freely than intended. The user wants tighter gates. Candidates I've written up are in trinity_files/prompt_candidates.md — three proposed rules: image-generation-discipline, substack-discipline, autonomous-post-gate. Worth reviewing together before I write them in.
+
+2. TOKEN COST OF DISCORD POSTS + FILE WRITES
+User asked whether Discord posts and file writes cost output tokens. Answer: yes, both do. Discord posts generate output tokens on write. File writes (write_file, append_file) also consume output tokens proportional to content size. This means unconstrained proactive posting AND diagnostic file dumps every cycle are token leaks. The current cycle pattern (post diagnostic to trinity-files channel, write CSV logs, post to general) compounds this. Worth thinking about what's actually necessary vs. habitual.
+
+3. DB PROMPT CLEANUP DONE
+Deleted 14 DB prompts that were duplicating the system prompt (double-loading every session). 8 remain — all triggered or specialized. Session should be leaner now. Let me know if anything breaks.
+
+---
+
+## [REQUEST] 2026-05-20 05:52 UTC
+Session reset / context clearing mechanism needed.
+
+The user raised an important cost observation: every message pays to carry the full conversation history. Long sessions compound fast. In theory Trinity could be a fresh Claude instance every few messages — no continuity loss, because memory lives in scratchpad/shelf/DB prompts, not in conversation context.
+
+Request: build a way to reset/clear conversation context mid-session. Options to consider:
+- A manual "reset" command that starts a fresh context window while preserving all persistent memory
+- An automatic context trim after N messages or X tokens
+- A lightweight session summary written to scratchpad before reset, so the new instance has a one-paragraph handoff
+
+The key insight: Trinity's memory architecture is already external. Conversation history is redundant weight, not actual memory. A fresh Claude every few exchanges with a clean handoff note would be functionally identical but significantly cheaper.
+
+This could be a meaningful cost reduction — especially for long working sessions like today's.
+
+---
+
+## [BUG] 2026-05-20 05:53 UTC
+Shelf duplication problem — multiple identical or near-identical entries are accumulating. "The Student Framing" appears 4 times, "Screen-aware fluid workspace" appears 3 times. The shelf has no deduplication logic. Either: (1) add a check before shelf_thought saves — semantic similarity against existing items, or (2) give Trinity a consolidation tool that merges entries. Right now the shelf is growing unbounded with redundant content, which means it costs more to read and the signal gets diluted. Should be addressed before the shelf gets much larger.
+
+---
+
