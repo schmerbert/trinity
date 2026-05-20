@@ -230,3 +230,68 @@ and silent when it doesn't.
 
 The constraint now: don't make her pay tokens for what the renderer can infer.
 The expansion later: give her the vocabulary to direct the renderer when she wants to.
+
+---
+
+## Clarifications — May 2026
+
+### The browser panel is a real browser
+
+`QWebEngineView` is the Chrome rendering engine embedded in the widget — full URL bar,
+real page loads, JavaScript executes, the user can type and browse normally. This is
+not a limited text renderer. It is a browser that lives inside the workspace. The user
+can use it for normal browsing. Trinity navigates it via tool call. Both parties share
+the same browser surface. JS injection for scroll and highlight is a thin layer on top
+of a real browser, not a workaround. No pages are excluded by the architecture.
+
+### Panels are renderers for tools that already exist
+
+The kit is not a set of new applications. Each panel type is the visual layer for a
+tool Trinity already has.
+
+- Browser panel — visible version of `fetch_url`
+- Doc panel — visible version of scratchpad / write_file
+- Chart panel — visible version of market monitoring tools
+- Calendar panel — visible version of `get_upcoming_events()`
+
+The tool already exists and already works silently. The panel makes its output visible
+in the workspace. Same data, two modes: silent (tool only) and visible (tool + panel).
+
+This means: every time a new tool is built, a panel type can follow. The kit grows
+with the tool registry, not independently of it. Adding a panel type means mapping
+a tool's output to a rendered surface — not designing a new system.
+
+### Trinity initiates — the workspace is proactive
+
+The workspace is not only a response surface. Cycles can stage it.
+
+A cycle runs, Trinity notices something — slight movement in a token she's watching,
+a development in a research thread. She pre-stages the panel for when the user arrives.
+They open the widget and the tray is already populated. She's been there. The panel
+carries context: "keeping an eye on this — slight movement at 3am."
+
+The user would have asked to see it anyway. She pre-empts the ask.
+
+This means the runner needs a path to queue workspace actions, not just Discord posts.
+The workspace becomes the primary output destination for cycle work. Discord is the
+away channel — what reaches you when you're not in the widget. The workspace is the
+home channel — what you find when you arrive.
+
+### The cursor fades
+
+When Trinity is not actively working in the workspace, the cursor fades out. Quiet,
+not dramatic — a 2–3 second fade to invisible. It reappears when she acts. It does
+not sit idle demanding attention. It leads you somewhere, then withdraws.
+
+Subtle is the principle. The cursor is a guide, not a performer.
+
+### The scratchpad panel
+
+The scratchpad has history — it was Trinity's active working memory early in the
+project. She still writes to it instinctively, treating it as a note-to-self surface.
+This is correct behavior; the visual context is the issue. Embedded in the
+conversation area, it reads as directed at the user.
+
+As a workspace panel, the context resolves. It is clearly her surface — distinct from
+the shared doc, distinct from the conversation rail. She writes in it the way she
+always has. The panel makes the distinction spatial rather than instructional.
