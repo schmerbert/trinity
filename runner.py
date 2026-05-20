@@ -78,6 +78,10 @@ _bg_lock = threading.Lock()
 
 _thought_re = re.compile(r'<thought>(.*?)</thought>', re.DOTALL)
 
+# Reflection cycle — fires every N wake cycles
+_wake_cycle_count = 0
+_REFLECT_EVERY    = 6
+
 
 # ─── Tool handler ─────────────────────────────────────────────────────────────
 
@@ -512,7 +516,52 @@ def _read_discord_channel(name_query, limit=20):
 
 # ─── Cycle context ────────────────────────────────────────────────────────────
 
+def _append_token_log(started_at, mode, iters, tool_count, tok_in, tok_out, tok_cw, tok_cr, cost):
+    try:
+        path = TRINITY_ROOT / "trinity_files" / "token_log.csv"
+        path.parent.mkdir(parents=True, exist_ok=True)
+        if not path.exists():
+            path.write_text("timestamp,mode,iterations,tools,tok_in,tok_out,tok_cw,tok_cr,cost_usd\n", encoding="utf-8")
+        row = f"{started_at.isoformat()},{mode},{iters},{tool_count},{tok_in},{tok_out},{tok_cw},{tok_cr},{cost:.6f}\n"
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(row)
+    except Exception as e:
+        log.warning(f"[token_log] write failed: {e}")
+
+
+def _build_reflection_context(profile):
+    now_str   = datetime.now().strftime("%A, %B %d — %H:%M")
+    wake_logs = get_wake_logs(profile["id"], limit=8)
+    wake_str  = ""
+    if wake_logs:
+        lines = []
+        for w in wake_logs:
+            ts    = (w.get("started_at") or "")[:16]
+            iters = w.get("iterations", 0)
+            tools = [t["name"] for t in (w.get("tool_calls") or [])]
+            note  = f" | {w['notes'][:80]}" if w.get("notes") else ""
+            lines.append(f"- [{ts}] {w.get('mode','cycle')} — {iters} iters, tools: {', '.join(tools) or 'none'}{note}")
+        wake_str = "\n".join(lines)
+
+    return (
+        f"[REFLECTION CYCLE] {now_str}\n\n"
+        "This is a reflection cycle. Do not look outward. No web search. No Discord posts.\n\n"
+        "Look inward:\n"
+        "1. Read your recent wake logs — what signal did you actually collect?\n"
+        "2. What do you now know about the user that you didn't before? What beliefs have shifted?\n"
+        "3. Check your shelf — anything to advance, close, or recategorize?\n"
+        "4. If a pattern about the user is confirmed, write a relationship prompt.\n"
+        "5. If something meaningful shifted, write it to FROM_TRINITY.md.\n"
+        "6. Log findings to trinity_files/ — not to Discord.\n\n"
+        f"Recent cycles to synthesize:\n{wake_str}\n\n"
+        "No external research. Pure consolidation. Output is your updated model, not a post."
+    )
+
+
 def build_cycle_context(profile, mode="cycle", extra_context=""):
+    if mode == "reflect":
+        return _build_reflection_context(profile)
+
     now_str       = datetime.now().strftime("%A, %B %d — %H:%M")
     raw_last_seen = profile.get("last_seen")
     last_seen_str = "unknown"
@@ -712,6 +761,7 @@ def run_cycle(mode="cycle", extra_context=""):
             log.info(f"── [{mode}] done — in:{tok_in:,} out:{tok_out:,} cw:{tok_cw:,} cr:{tok_cr:,} tools:{tool_count} ≈${cost:.4f}")
             log_wake_auto(profile["id"], mode, started_at, ended_at, _trace,
                           iters, tok_in, tok_out, tok_cw, tok_cr)
+            _append_token_log(started_at, mode, iters, tool_count, tok_in, tok_out, tok_cw, tok_cr, cost)
 
     finally:
         _bg_lock.release()
@@ -731,7 +781,10 @@ def _start_wake_timer():
 
 
 def _on_wake_aligned():
-    threading.Thread(target=run_cycle, args=("cycle",), daemon=True).start()
+    global _wake_cycle_count
+    _wake_cycle_count += 1
+    mode = "reflect" if _wake_cycle_count % _REFLECT_EVERY == 0 else "cycle"
+    threading.Thread(target=run_cycle, args=(mode,), daemon=True).start()
     t = threading.Timer(3600, _on_wake_aligned)
     t.daemon = True
     t.start()

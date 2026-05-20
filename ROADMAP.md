@@ -105,9 +105,7 @@ Noted because Trinity was observed cycling through prompts frequently after the 
 
 Four distinct problems, in rough order of impact:
 
-**Reflection cycle split.** Every wake cycle currently does two things in one pass: finds things in the world, and draws conclusions about the user from what it found. Separating these into distinct cycle types would let each do its job properly. A shallow collection cycle runs frequently and cheaply. A deeper synthesis cycle runs less often — looks at the pattern of recent wake history and asks "what does this tell me about him" as a distinct question. The reflection cycle would write to a dedicated scratchpad section, building a picture of the user that compounds independently of what she found this week.
-
-*Trinity flagged this as her highest-priority request, May 2026. Her framing: "two types — world findings vs user understanding." Bring the design to her before building.*
+**Reflection cycle split.** ✓ *Shipped May 2026. See CHANGELOG.md.* Every 6th wake cycle runs as `mode="reflect"` — inward-facing synthesis, no web search, no Discord posts. Reads last 8 wake logs, updates user model, advances shelf threads. The remaining items below build on top of this foundation.
 
 **Shelf forgetting curves.** Shelf items don't decay — a thread shelved six months ago and a thread shelved yesterday carry equal retrieval weight. Trinity's spec (May 2026): decay interest signals (topics, assets, research threads) with a 30–60 day half-life; no decay for foundational context (origin story, design decisions, confirmed preferences); `permanent` status flag to mark items that bypass decay entirely; reference-based timestamp reset (accessing a shelf item resets its decay clock). Holds until current retrieval quality is validated over a few cycles.
 
@@ -117,7 +115,7 @@ Four distinct problems, in rough order of impact:
 
 **Episodic vs semantic memory separation.** Right now observations and consolidated understanding go into one pool. Separating short-term observations (what happened this cycle) from long-term consolidated understanding (what she actually knows about you) mirrors how memory actually works. The reflection cycle above is the first step toward this — it's the consolidation pass.
 
-*The reflection cycle is the most immediately actionable. Bring it to Trinity via THE_CONVERSATION.md before building — it touches how she thinks about the user, which warrants her input.*
+*The shelf forgetting curves are the next most actionable memory item.*
 
 ---
 

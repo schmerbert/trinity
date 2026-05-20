@@ -10,6 +10,44 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-21] — ARCHITECTURE.md: ten documentation gaps closed
+
+Column names corrected to match actual code (`scratchpad_text`, `tokens_in/tokens_out/tokens_cache_write/tokens_cache_read`). `TRINITY_RUNNER` added to env vars section — most dangerous omission (developer sets up without it, double billing). Reflection cycle removed from "What Is Not Here Yet" and documented correctly in Background Cycle Architecture (mode="reflect", every 6th cycle, `_REFLECT_EVERY=6`). SQL setup files documented (four files, run order). `token_log.csv` documented. `ON_INFERENCE.md` added to Who Is Trinity file list. `reflect` added to wake_logs mode values. `UI_ROADMAP.md` referenced in trinity_files/. "What Is Not Here Yet" updated accordingly.
+
+---
+
+## [2026-05-21] — Architecture principle: tool calls as decisions, not labor
+
+Documented in `trinity_files/specs/UI_ROADMAP.md`. If work is mechanical execution — diagnostic formatting, system pings, log writes, shelf summaries — a function should do it, not Trinity generating it token by token. The intelligence is in deciding to run the work, not producing it. Token report is already the model: runner writes the CSV, Trinity reads it. This pattern should apply wherever her output budget is spent on formatting rather than judgment. Trinity's input requested via THE_CONVERSATION.md before implementation.
+
+---
+
+## [2026-05-21] — UI Roadmap filed
+
+`trinity_files/specs/UI_ROADMAP.md` — founding vision document for the widget interface. The widget is a tray that extends from the conversation rail, not a window launcher. Trinity drops panels into an empty workspace; the cursor is her expression in that space. Two first panels: shared document (text-first, both parties write simultaneously) and browser (open, scroll, highlight — reading made visible). Architectural principles: UI as a command canvas Trinity drives (not an environment she lives in), aesthetic layer fully separated into QSS for user skinning. Build phases 1–3 are the demo. Everything after is making it richer. Trinity has been notified via THE_CONVERSATION.md.
+
+---
+
+## [2026-05-20] — Webhook routing fix + shelf deduplication
+
+**Webhook routing fix** (`voice/discord_interface.py`): The `thought_drain` lookup was failing silently for all `trinity-*` channels because webhook keys are stored as short names (`thought`, `files`, `research`) while channel names use the full Discord format (`trinity-thought`, `trinity-files`). Fixed by stripping the `trinity-` prefix before lookup, then falling back to the short key, then fuzzy-matching on hyphen-stripped names. Both short and full channel names now resolve. All five active webhooks route correctly.
+
+**Shelf deduplication** (`brain/memory.py`): `add_to_shelf()` now checks for near-duplicate entries before inserting. Uses the already-computed embedding vector, queries top-3 active shelf items via `search_shelf` RPC, and rejects the insert if any item has similarity ≥ 0.9 — returning `{"status": "duplicate", "existing": "..."}` instead. The check fails open (insert proceeds if the RPC errors). Redundant shelf entries no longer accumulate silently.
+
+---
+
+## [2026-05-20] — Session reset, reflection cycle, automatic token log
+
+Three infrastructure builds on the demo branch.
+
+**Session reset** (`reset_context` tool, widget only): Trinity can call `reset_context(handoff)` to clear conversation history mid-session. Handoff note is written to scratchpad section 'session'. All external memory — shelf, scratchpad, prompts — is preserved. History clears; next user message starts fresh. Prevents token cost from accumulating in long sessions.
+
+**Reflection cycle** (runner.py): Every 6 wake cycles, the runner fires a `reflect` mode cycle instead of a standard world cycle. Reflection context is inward-facing: synthesize recent wake logs, update user model, advance shelf threads, write to FROM_TRINITY.md. No web search, no Discord posts. Pure consolidation. Logged as mode='reflect' in wake_logs.
+
+**Automatic token log** (runner.py): After every cycle completes, the runner appends a row to `trinity_files/token_log.csv` — timestamp, mode, iterations, tools, tok_in, tok_out, tok_cw, tok_cr, cost_usd. Trinity reads it with `read_file('trinity_files/token_log.csv')`. She no longer needs to generate the report herself.
+
+---
+
 ## [2026-05-20] — Core prompt condensed; behavioral layer migrated to Trinity's own prompts
 
 `TRINITY_BASE` stripped to architecture only: what Trinity is, that she runs, the cycle engine separation, THE_CONVERSATION.md channel, epistemic baseline, memory signal syntax, self-prompt syntax. Removed: tone guidelines, behavioral instructions, identity philosophy, shelf management guidance. These belonged in Trinity's self-authored identity prompts, not the developer's voice. Trinity has begun writing the behavioral layer herself (identity prompts: what-i-am, how-i-speak, what-the-cycles-are-for, holding-threads). The core now describes the system; Trinity describes herself.

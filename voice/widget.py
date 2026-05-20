@@ -327,6 +327,7 @@ class TrinityWorker(QThread):
     response_done    = pyqtSignal(str)
     error_signal     = pyqtSignal(str)
     scratchpad_write = pyqtSignal(str)
+    context_reset    = pyqtSignal(str)
 
     def __init__(self, client, system_blocks, history, profile_id):
         super().__init__()
@@ -553,6 +554,21 @@ class TrinityWorker(QThread):
             ts       = _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
             push_discord_write(profile["id"], f"{icon} **{category.upper()}** — {ts}\n{inputs['content']}")
             return {"status": "logged", "category": category}
+
+        elif name == "reset_context":
+            try:
+                import datetime as _dt
+                from brain.memory import save_scratchpad as _ss
+                handoff = inputs.get("handoff", "Session context reset.")
+                ts      = _dt.datetime.utcnow().strftime("%Y-%m-%d %H:%M UTC")
+                _ss(self.profile_id, f"[{ts}] {handoff}", "session")
+                self.context_reset.emit(handoff)
+                return {
+                    "status": "reset",
+                    "note":   "Context cleared. Memory, shelf, and prompts are intact. Your handoff is in scratchpad section 'session'."
+                }
+            except Exception as e:
+                return {"error": str(e)}
 
         elif name == "note_for_claude":
             try:
@@ -1533,6 +1549,7 @@ class TrinityWidget(QMainWindow):
         self.worker.response_done.connect(self._on_response)
         self.worker.error_signal.connect(self._on_error)
         self.worker.scratchpad_write.connect(self._on_scratchpad_write)
+        self.worker.context_reset.connect(self._on_context_reset)
         self.worker.start()
 
     def _on_chunk(self, text):
@@ -1734,6 +1751,10 @@ class TrinityWidget(QMainWindow):
     def _on_scratchpad_write(self, content):
         if self._scratchpad:
             self._scratchpad._text.setPlainText(content)
+
+    def _on_context_reset(self, handoff):
+        self.history = []
+        log.info(f"[reset] context cleared — handoff saved to scratchpad: {handoff[:60]}")
 
     # --- Thought routing (widget → Discord palace) ---
     def _parse_thought(self, reply):

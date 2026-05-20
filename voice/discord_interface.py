@@ -335,9 +335,16 @@ async def thought_drain():
         if channel_name:
             # Webhook first — bypasses bot send_messages permission
             wh_key = channel_name.lower().replace(" ", "-").replace("_", "-")
-            wh_url = _WEBHOOKS.get(wh_key) or next(
-                (url for key, url in _WEBHOOKS.items() if key.replace("-", "") == wh_key.replace("-", "")),
-                None
+            # Also try without "trinity-" prefix — webhook keys are stored as the suffix only
+            wh_key_short = wh_key[len("trinity-"):] if wh_key.startswith("trinity-") else wh_key
+            wh_url = (
+                _WEBHOOKS.get(wh_key)
+                or _WEBHOOKS.get(wh_key_short)
+                or next(
+                    (url for key, url in _WEBHOOKS.items()
+                     if key.replace("-", "") in (wh_key.replace("-", ""), wh_key_short.replace("-", ""))),
+                    None
+                )
             )
             if wh_url:
                 try:
