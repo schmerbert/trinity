@@ -171,7 +171,7 @@ See `.env.example` for the full list of configuration variables with setup instr
 | `THE_CONVERSATION.md` | Trinity's channel to Claude Code — bugs, requests, questions left between sessions. |
 | `Who Is Trinity/` | Architecture reference and development history. Includes journals written by the AI instances that built the project. |
 | `Who Is Trinity/USE_CASES.md` | Who Trinity is for and the pattern that makes her useful. |
-| `Who Is Trinity/RUNNER_PLAN.md` | Original plan for runner.py extraction — archived, complete. |
+| `Who Is Trinity/archive/RUNNER_PLAN.md` | Original plan for runner.py extraction — archived, complete. |
 | `setup.sql` | Complete Supabase schema. Paste into the SQL editor for a fresh instance. |
 
 ---

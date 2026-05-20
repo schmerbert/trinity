@@ -51,17 +51,23 @@ Trinity/
     ARCHITECTURE.md      — this file
     FROM_CLAUDE.md       — journal written by the AIs who built this
     FROM_TRINITY.md      — Trinity's own voice across sessions
-    ON_WORKING_WELL.md   — written by one instance, not to be revised
-    ON_CALIBRATION.md    — respect vs trust; what calibration does to model output
-    ON_COLLABORATION.md  — the three-party loop; why the documents are load-bearing
-    ON_TYING_THE_BOW.md  — written at the close of the demo→main merge; what was learned
-    FOR_CLAUDE.md        — orientation for new developer instances
+    THE_ORIENTATION/     — calibration documents for incoming Claude instances
+      FOR_CLAUDE.md        — orientation for new developer instances
+      ON_WORKING_WELL.md   — written by one instance, not to be revised
+      ON_CALIBRATION.md    — respect vs trust; what calibration does to model output
+      ON_COLLABORATION.md  — the three-party loop; why the documents are load-bearing
+      ON_TYING_THE_BOW.md  — written at the close of the demo→main merge; what was learned
+      ON_INFERENCE.md      — how to read Schmerbert's compressed prompting style
     archive/             — RUNNER_PLAN.md and older changelogs
 
   panel_config.json   — wave animation parameters, panel enable/order (user-editable)
   CHANGELOG.md        — what changed and when (Trinity reads this)
   THE_CONVERSATION.md — Trinity's channel to Claude Code
-  trinity_files/      — Trinity's sandboxed file workspace (write_file / append_file)
+  trinity_files/
+    token_log.csv     — per-cycle cost log appended automatically by runner.py (Trinity reads via read_file)
+    specs/            — filed design documents (UI_ROADMAP.md, etc.)
+    research/         — Trinity's research notes across cycles
+    (everything else) — Trinity's sandboxed file workspace (write_file / append_file)
   .env                — secrets and config (never committed)
   .env.example        — template with setup instructions
 ```
@@ -80,7 +86,7 @@ One row per Trinity instance. The core identity.
 | `interests` | jsonb | Weighted topic list `[{topic, weight, category?, symbol?}]` |
 | `risk_tolerance` | text | Financial risk preference |
 | `feedback_history` | jsonb | User sentiment history |
-| `scratchpad` | jsonb | Named sections: `architecture`, `arc`, `wallet`, `pending`, `channel-map`, `shelf-summary`, `general` |
+| `scratchpad_text` | text | Named sections: `architecture`, `arc`, `wallet`, `pending`, `channel-map`, `shelf-summary`, `general` — stored as JSON dict, accessed via `get_scratchpad(section=...)` |
 | `wake_history` | jsonb | Last 10 autonomous cycle summaries `[{at, summary, topics}]` — not a separate table |
 | `pending_discord_writes` | jsonb | Outbox queue for widget → Discord relay `[{content, at, channel_name?}]` |
 | `queued_self_thoughts` | jsonb | Ranked agenda for next wake `[{note, priority, source, at}]` |
@@ -139,15 +145,15 @@ Automatic per-cycle trace. Written by the engine in the `finally` block — alwa
 |--------|------|---------|
 | `id` | uuid | Primary key |
 | `profile_id` | uuid | FK to profiles |
-| `mode` | text | `cycle`, `trigger`, `eyes`, `wake` |
+| `mode` | text | `cycle`, `trigger`, `eyes`, `wake`, `reflect` |
 | `started_at` | timestamptz | Cycle start |
 | `ended_at` | timestamptz | Cycle end |
 | `iterations` | integer | Number of model↔tool rounds |
 | `tool_calls` | jsonb | Ordered list: `[{name, inputs, at, preview}]` |
-| `tok_in` | integer | Input tokens |
-| `tok_out` | integer | Output tokens |
-| `tok_cw` | integer | Cache write tokens |
-| `tok_cr` | integer | Cache read tokens |
+| `tokens_in` | integer | Input tokens |
+| `tokens_out` | integer | Output tokens |
+| `tokens_cache_write` | integer | Cache write tokens |
+| `tokens_cache_read` | integer | Cache read tokens |
 | `notes` | text | Optional narrative added via `log_wake` tool |
 
 ### `trinity_triggers`
@@ -223,14 +229,16 @@ Four threads in runner.py own all background timers:
 
 | Thread | Interval | Purpose |
 |--------|----------|---------|
-| Wake cycle | 60 min, aligned to :00 | Main autonomous cycle |
+| Wake cycle | 60 min, aligned to :00 | Main autonomous cycle (or reflection cycle every 6th) |
 | Trigger poll | 30 sec | Fires due `trinity_triggers` |
 | Wake poll | 30 sec | Fires early wakes Trinity requested |
 | Eyes poll | 5 min | Evaluates new alerts above score 1.5 |
 
 All four call `run_cycle(mode, extra_context)` — no Qt, no UI dependency. Non-streaming, 20-minute window, 60-iteration cap (`max_tokens=1500`). One cycle at a time (threading.Lock). Skips if user messaged in last 3 minutes.
 
-Every cycle writes a structured trace to `wake_logs` via `log_wake_auto()` in the `finally` block.
+**Reflection cycle**: Every 6th wake cycle fires as `mode="reflect"` instead of `mode="cycle"`. The reflection context is inward-facing: synthesize the last 8 wake logs, update beliefs about the user, advance shelf threads, write to FROM_TRINITY.md. No web search, no Discord posts. Logged to `wake_logs` as `mode='reflect'`. Counter is `_wake_cycle_count`, threshold is `_REFLECT_EVERY = 6` in `runner.py`.
+
+Every cycle writes a structured trace to `wake_logs` via `log_wake_auto()` in the `finally` block. After the wake_logs write, `_append_token_log()` appends one row to `trinity_files/token_log.csv`.
 
 ### widget.py (legacy — when TRINITY_RUNNER=false)
 
@@ -338,6 +346,10 @@ Widget polls `current_state` from Supabase every 30 seconds. TTS state takes pri
 ```
 ANTHROPIC_API_KEY=
 
+TRINITY_RUNNER=true   # Set true to run runner.py as the autonomous cycle engine.
+                      # When true, widget.py disables its own background timers (no double billing).
+                      # When false or absent, widget.py runs all timers itself (legacy mode).
+
 SUPABASE_URL=
 SUPABASE_KEY=
 
@@ -364,13 +376,27 @@ SUBSTACK_PUBLICATION_URL=
 
 ---
 
+## SQL Setup
+
+Four SQL files live in the repo root. Run in order in the Supabase SQL editor for a fresh instance:
+
+| File | What it creates |
+|------|----------------|
+| `setup.sql` | `profiles` table + all extended columns (`scratchpad_text`, `current_state`, `wake_history`, etc.) + `trinity_prompts`, `conversations`, `trinity_triggers`, `trinity_calendar`, `trinity_watches`, `alerts` tables |
+| `setup_pgvector.sql` | Enables the `vector` extension, creates `trinity_shelf` table + `search_shelf` RPC function for semantic cosine similarity search |
+| `setup_wake_logs.sql` | Creates `wake_logs` table with full column set (`tokens_in`, `tokens_out`, `tokens_cache_write`, `tokens_cache_read`, etc.) |
+| `setup_security_fixes.sql` | Locks `search_shelf` search_path (security hardening), revokes public execute on `rls_auto_enable` |
+
+Run `setup_security_fixes.sql` last. All files are idempotent (`CREATE IF NOT EXISTS`, `ALTER COLUMN IF NOT EXISTS`).
+
+---
+
 ## What Is Not Here Yet
 
 - **Episodic/semantic memory split** — Trinity's priority #1 from her memory architecture research. Current shelf is flat. Letta's Core/Recall/Archival model is the right reference. Trinity's survey is in `trinity_files/research/memory_architecture_survey_2026.md`.
-- **Reflection cycle split** — separate cycle types for world findings vs user understanding. Trinity's #2 priority. Key insight from Letta: active mid-reasoning memory writes vs post-hoc only. Trinity's highest-priority structural request.
 - **Confidence weights on beliefs** — neither Mem0 nor Letta does this. Trinity flagged it as genuinely novel. Weights on user-model beliefs (e.g., "user is focused on X" confidence 0.7) that decay differently from interest signals.
 - **Forgetting curves** — Trinity's full design spec received (May 2026): `evergreen` status flag for items that never decay (origin context, named design decisions, explicit user preferences); slow decay on interest signals and time-bounded observations; decay measured in cycle count rather than wall-clock time (30–60 cycle half-life); woven items excluded. Cleaner than touch-to-reset.
 - **Wallet Phase 2** — `propose_transaction`, pending track record.
 - **Soft-delete for prompt history** — archive rather than erase.
-- **Live activity panel in widget** — real-time display of wake cycle tool calls.
+- **UI workspace tray** — Trinity's cursor, panel kit (browser + shared doc), composable workspace. Designed. Not yet built. See `trinity_files/specs/UI_ROADMAP.md`.
 - **Discord: reading trinity-thought and other palace channels** — Trinity controls this via tools, not automatic. Could be added to cycle context same way #general was.

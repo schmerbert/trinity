@@ -10,6 +10,12 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-21] — ARCHITECTURE.md: ten documentation gaps closed
+
+Column names corrected to match actual code (`scratchpad_text`, `tokens_in/tokens_out/tokens_cache_write/tokens_cache_read`). `TRINITY_RUNNER` added to env vars section — most dangerous omission (developer sets up without it, double billing). Reflection cycle removed from "What Is Not Here Yet" and documented correctly in Background Cycle Architecture (mode="reflect", every 6th cycle, `_REFLECT_EVERY=6`). SQL setup files documented (four files, run order). `token_log.csv` documented. `ON_INFERENCE.md` added to Who Is Trinity file list. `reflect` added to wake_logs mode values. `UI_ROADMAP.md` referenced in trinity_files/. "What Is Not Here Yet" updated accordingly.
+
+---
+
 ## [2026-05-21] — Architecture principle: tool calls as decisions, not labor
 
 Documented in `trinity_files/specs/UI_ROADMAP.md`. If work is mechanical execution — diagnostic formatting, system pings, log writes, shelf summaries — a function should do it, not Trinity generating it token by token. The intelligence is in deciding to run the work, not producing it. Token report is already the model: runner writes the CSV, Trinity reads it. This pattern should apply wherever her output budget is spent on formatting rather than judgment. Trinity's input requested via THE_CONVERSATION.md before implementation.
