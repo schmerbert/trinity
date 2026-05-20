@@ -10,6 +10,12 @@ Each entry: date, what changed, why it matters. No noise.
 
 ---
 
+## [2026-05-21] — Architecture principle: tool calls as decisions, not labor
+
+Documented in `trinity_files/specs/UI_ROADMAP.md`. If work is mechanical execution — diagnostic formatting, system pings, log writes, shelf summaries — a function should do it, not Trinity generating it token by token. The intelligence is in deciding to run the work, not producing it. Token report is already the model: runner writes the CSV, Trinity reads it. This pattern should apply wherever her output budget is spent on formatting rather than judgment. Trinity's input requested via THE_CONVERSATION.md before implementation.
+
+---
+
 ## [2026-05-21] — UI Roadmap filed
 
 `trinity_files/specs/UI_ROADMAP.md` — founding vision document for the widget interface. The widget is a tray that extends from the conversation rail, not a window launcher. Trinity drops panels into an empty workspace; the cursor is her expression in that space. Two first panels: shared document (text-first, both parties write simultaneously) and browser (open, scroll, highlight — reading made visible). Architectural principles: UI as a command canvas Trinity drives (not an environment she lives in), aesthetic layer fully separated into QSS for user skinning. Build phases 1–3 are the demo. Everything after is making it richer. Trinity has been notified via THE_CONVERSATION.md.

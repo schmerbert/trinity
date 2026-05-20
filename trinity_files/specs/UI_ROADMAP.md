@@ -233,6 +233,48 @@ The expansion later: give her the vocabulary to direct the renderer when she wan
 
 ---
 
+## Tool Calls as Decisions, Not Labor — May 2026
+
+A principle that applies across all of Trinity's architecture, not just the UI.
+
+**If it can be a function, it should be a function.**
+
+Two categories of work:
+
+**Work that requires her intelligence** — synthesizing findings, deciding what matters,
+forming a judgment, writing something with genuine reasoning in it. These cost tokens
+because the tokens are doing real work. The output is worth the cost.
+
+**Work that is mechanical execution** — ping a system, check a value, write a row,
+format a log, compute a summary from existing data. The intelligence is in the
+*decision* to do it, not in the act itself. Once she's decided, a function executes
+it cheaper, faster, and more reliably than she can generate it token by token.
+
+**The reframe: tool calls are decisions. Functions are execution.**
+
+She calls `run_diagnostic()` — one input, minimal output tokens, function produces
+the report. She doesn't write the diagnostic; she reads it. The judgment was in
+deciding to run it. The production is mechanical.
+
+Current examples where this applies:
+- Diagnostic checks — function polls and formats, she reads the result
+- Token/cost reports — already fixed: runner appends CSV automatically, she reads it
+- System health pings — function returns status, she doesn't generate the status
+- Shelf summaries — computed from existing data, not synthesized fresh
+- Log formatting — structured by function, not written by her
+
+**Applied to the UI specifically:**
+
+Panel content (HUD, surface tab, future panels) should be populated by functions
+pulling from Supabase — not by Trinity generating content to fill them. The HUD
+already works this way: it calls `get_scratchpad()` and `get_wake_history()` on a
+30-second timer. Trinity never pays tokens to update the HUD. This is the pattern
+all panels should follow.
+
+**Trinity's input wanted here.** See THE_CONVERSATION.md.
+
+---
+
 ## Clarifications — May 2026
 
 ### The browser panel is a real browser
